@@ -13,15 +13,14 @@
         android:layout_height="wrap_content"
         android:text="PROFILE"
         android:textSize="25sp"
-        android:layout_marginTop="30dp"
+        android:layout_marginTop="20dp"
         android:textStyle="bold"
         android:textColor="#E00024"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        />
+        app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- Profile Icon (Without CardView) -->
+    <!-- Profile Icon -->
     <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/profile_icon"
         android:layout_width="100dp"
@@ -56,159 +55,55 @@
         app:layout_constraintTop_toBottomOf="@id/fullName"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="57.5dp"
+        android:layout_marginTop="16dp"
         android:layout_marginBottom="24dp"/>
 
     <!-- Menu Container -->
+    <!-- Logout -->
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/menuContainer"
+        android:id="@+id/logout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        app:layout_constraintTop_toBottomOf="@id/fullName"
+        android:layout_marginTop="250dp"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackground"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="24dp">
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Edit Profile -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/editProfile"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:padding="12dp"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginTop="26dp"
+        <ImageView
+            android:id="@+id/logoutIcon"
+            android:layout_width="35dp"
+            android:layout_height="35dp"
+            android:src="@drawable/logout"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            app:layout_constraintBottom_toBottomOf="parent"/>
 
-            <ImageView
-                android:id="@+id/editIcon"
-                android:layout_width="35dp"
-                android:layout_height="35dp"
-                android:src="@drawable/edit_profile"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
-
-            <TextView
-                android:id="@+id/editText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:text="Edit Profile"
-                android:textSize="18sp"
-                android:textColor="?android:textColorPrimary"
-                app:layout_constraintStart_toEndOf="@id/editIcon"
-                app:layout_constraintTop_toTopOf="@id/editIcon"
-                app:layout_constraintBottom_toBottomOf="@id/editIcon"
-                app:layout_constraintEnd_toStartOf="@id/editArrow"
-                android:layout_marginStart="12dp"/>
-
-            <TextView
-                android:id="@+id/editArrow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="›"
-                android:textSize="50sp"
-                android:textColor="?android:textColorPrimary"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="@id/editIcon"
-                app:layout_constraintBottom_toBottomOf="@id/editIcon"/>
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <!-- Repeat for Change Password -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/changePassword"
+        <TextView
+            android:id="@+id/logoutText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="-20dp"
-            android:padding="12dp"
-            android:background="?attr/selectableItemBackground"
-            app:layout_constraintTop_toBottomOf="@id/editProfile"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            android:text="Logout"
+            android:textSize="18sp"
+            android:textColor="?android:textColorPrimary"
+            app:layout_constraintStart_toEndOf="@id/logoutIcon"
+            app:layout_constraintTop_toTopOf="@id/logoutIcon"
+            app:layout_constraintBottom_toBottomOf="@id/logoutIcon"
+            app:layout_constraintEnd_toStartOf="@id/logoutArrow"
+            android:layout_marginStart="12dp"/>
 
-            <ImageView
-                android:id="@+id/changeIcon"
-                android:layout_width="35dp"
-                android:layout_height="35dp"
-                android:src="@drawable/change_password"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"/>
-
-            <TextView
-                android:id="@+id/changeText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:text="Change Password"
-                android:textSize="18sp"
-                android:textColor="?android:textColorPrimary"
-                app:layout_constraintStart_toEndOf="@id/changeIcon"
-                app:layout_constraintTop_toTopOf="@id/changeIcon"
-                app:layout_constraintBottom_toBottomOf="@id/changeIcon"
-                app:layout_constraintEnd_toStartOf="@+id/changeArrow"
-                android:layout_marginStart="12dp"/>
-
-            <TextView
-                android:id="@+id/changeArrow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="›"
-                android:textSize="50sp"
-                android:textColor="?android:textColorPrimary"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="@id/changeIcon"
-                app:layout_constraintBottom_toBottomOf="@id/changeIcon"/>
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <!-- Logout -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/logout"
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/logoutArrow"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="-20dp"
-            android:padding="12dp"
-            android:background="?attr/selectableItemBackground"
-            app:layout_constraintTop_toBottomOf="@id/changePassword"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <ImageView
-                android:id="@+id/logoutIcon"
-                android:layout_width="35dp"
-                android:layout_height="35dp"
-                android:src="@drawable/logout"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"/>
-
-            <TextView
-                android:id="@+id/logoutText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:text="Logout"
-                android:textSize="18sp"
-                android:textColor="?android:textColorPrimary"
-                app:layout_constraintStart_toEndOf="@id/logoutIcon"
-                app:layout_constraintTop_toTopOf="@id/logoutIcon"
-                app:layout_constraintBottom_toBottomOf="@id/logoutIcon"
-                app:layout_constraintEnd_toStartOf="@+id/logoutArrow"
-                android:layout_marginStart="12dp"/>
-
-            <TextView
-                android:id="@+id/logoutArrow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="›"
-                android:textSize="50sp"
-                android:textColor="?android:textColorPrimary"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="@id/logoutIcon"
-                app:layout_constraintBottom_toBottomOf="@id/logoutIcon"/>
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
+            android:text="›"
+            android:textSize="40sp"
+            android:textColor="?android:textColorPrimary"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/logoutIcon"
+            app:layout_constraintBottom_toBottomOf="@id/logoutIcon"/>
     </androidx.constraintlayout.widget.ConstraintLayout>
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>
