@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">FLARE-CAPSTONE</string>
+    <string name="underline_text"><u>Click Here SMS Report!</u></string>
+    <!-- res/values/strings.xml -->
+    <string name="google_routes_key">AIzaSyCNyhUph8_RefB5yw_lr43J_7AMkeYICfU</string>
+
+</resources>

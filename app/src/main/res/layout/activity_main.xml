@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="20dp"
+    tools:context=".MainActivity">
+
+    <!-- Info Icon -->
+    <ImageView
+        android:id="@+id/onboard"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:src="@drawable/info"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginEnd="20dp" />
+
+    <!-- Logo -->
+    <ImageView
+        android:id="@+id/logo"
+        android:layout_width="150dp"
+        android:layout_height="150dp"
+        android:src="@drawable/ic_logo"
+        android:contentDescription="Logo"
+        app:layout_constraintTop_toBottomOf="@id/onboard"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="40dp" />
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/titleText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="FLARE"
+        android:textSize="40sp"
+        android:textStyle="bold"
+        android:textColor="?android:textColorPrimary"
+        app:layout_constraintTop_toBottomOf="@id/logo"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp" />
+
+    <!-- LOGIN Button -->
+    <Button
+        android:id="@+id/loginButton"
+        android:layout_width="250dp"
+        android:layout_height="68dp"
+        android:text="LOGIN"
+        android:textColor="@android:color/white"
+        android:backgroundTint="#E00024"
+        app:layout_constraintTop_toBottomOf="@id/titleText"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="70dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp" />
+
+    <!-- REGISTER Button -->
+    <Button
+        android:id="@+id/registerButton"
+        android:layout_width="250dp"
+        android:layout_height="68dp"
+        android:text="REGISTER"
+        android:textColor="@android:color/white"
+        android:backgroundTint="#E87F2E"
+        app:layout_constraintTop_toBottomOf="@id/loginButton"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="20dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp" />
+
+    <!-- SMS Report -->
+    <TextView
+        android:id="@+id/smsReport"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/underline_text"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?android:textColorPrimary"
+        app:layout_constraintTop_toBottomOf="@id/registerButton"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="20dp" />
+
+    <!-- Station Contact -->
+    <TextView
+        android:id="@+id/stationContact"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Station Contact"
+        android:textSize="18sp"
+        android:textColor="#1976D2"
+        android:textStyle="bold"
+        android:clickable="true"
+        android:focusable="true"
+        app:layout_constraintTop_toBottomOf="@id/smsReport"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="100dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

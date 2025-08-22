@@ -1,0 +1,324 @@
+package com.example.flare_capstone
+
+import android.Manifest
+import android.content.Intent
+import android.location.Location
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Bundle
+import android.telephony.SmsManager
+import android.util.Log
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.annotation.RequiresPermission
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import com.example.flare_capstone.databinding.ActivityOtherEmergencyBinding
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class OtherEmergencyActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityOtherEmergencyBinding
+    private lateinit var auth: FirebaseAuth
+    private var selectedEmergency: String? = null
+
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var latitude: Double = 0.0
+    private var longitude: Double = 0.0
+    private var exactLocation: String = ""
+
+    private val LOCATION_PERMISSION_REQUEST_CODE = 1001
+    private var lastReportTime: Long = 0
+
+    private lateinit var connectivityManager: ConnectivityManager
+    private var loadingDialog: AlertDialog? = null
+
+    private val TARGET_STATION_NODE = "MabiniFireStation"
+
+    private val profileKeyByStation = mapOf(
+        "LaFilipinaFireStation" to "LaFilipinaProfile",
+        "CanocotanFireStation"  to "CanocotanProfile",
+        "MabiniFireStation"     to "MabiniProfile"
+    )
+
+    // Now using "OtherEmergency" node for Mabini
+    private val otherEmergencyNodeByStation = mapOf(
+        "LaFilipinaFireStation" to "LaFilipinaOtherEmergency",
+        "CanocotanFireStation"  to "CanocotanOtherEmergency",
+        "MabiniFireStation"     to "MabiniOtherEmergency"
+    )
+
+    private data class StationInfo(
+        val stationNode: String,
+        val name: String,
+        val contact: String,
+        val lat: Double,
+        val lon: Double,
+        val reportNode: String
+    )
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) { runOnUiThread { hideLoadingDialog() } }
+        override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
+    }
+
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeManager.applyTheme(this)
+        super.onCreate(savedInstanceState)
+
+        binding = ActivityOtherEmergencyBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        auth = FirebaseAuth.getInstance()
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        connectivityManager = getSystemService(ConnectivityManager::class.java)
+
+        if (!isConnected()) showLoadingDialog("No internet connection") else hideLoadingDialog()
+        connectivityManager.registerDefaultNetworkCallback(networkCallback)
+
+        binding.sendButton.isEnabled = false
+
+        getLastLocation()
+        updateEmergencyText("Select an Emergency")
+
+        binding.floodingButton.setOnClickListener { handleEmergencySelection("Flooding") }
+        binding.buildingCollapseButton.setOnClickListener { handleEmergencySelection("Building Collapse") }
+        binding.gasLeakButton.setOnClickListener { handleEmergencySelection("Gas Leak") }
+        binding.fallenTreeButton.setOnClickListener { handleEmergencySelection("Fallen Tree") }
+
+        binding.cancelButton.setOnClickListener {
+            startActivity(Intent(this, DashboardActivity::class.java))
+            finish()
+        }
+
+        binding.sendButton.setOnClickListener {
+            val now = System.currentTimeMillis()
+            if (now - lastReportTime >= 5 * 60 * 1000) {
+                sendEmergencyReport(now)
+            } else {
+                val wait = (5 * 60 * 1000 - (now - lastReportTime)) / 1000
+                Toast.makeText(this, "Please wait $wait seconds before submitting again.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun isConnected(): Boolean {
+        val active = connectivityManager.activeNetwork ?: return false
+        val caps = connectivityManager.getNetworkCapabilities(active) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun showLoadingDialog(message: String = "Please wait if internet is slow") {
+        if (loadingDialog == null) {
+            val builder = AlertDialog.Builder(this)
+            val dialogView = layoutInflater.inflate(R.layout.custom_loading_dialog, null)
+            builder.setView(dialogView)
+            builder.setCancelable(false)
+            loadingDialog = builder.create()
+        }
+        loadingDialog?.show()
+        loadingDialog?.findViewById<TextView>(R.id.loading_message)?.text = message
+    }
+
+    private fun hideLoadingDialog() { loadingDialog?.dismiss() }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        connectivityManager.unregisterNetworkCallback(networkCallback)
+    }
+
+    private fun handleEmergencySelection(type: String) {
+        selectedEmergency = type
+        enableSendButton()
+        updateButtonAppearance(selectedEmergency)
+        updateEmergencyText("$type Selected")
+    }
+
+    private fun enableSendButton() { binding.sendButton.isEnabled = true }
+
+    private fun updateButtonAppearance(selected: String?) {
+        resetButtonAppearance(binding.floodingButton)
+        resetButtonAppearance(binding.buildingCollapseButton)
+        resetButtonAppearance(binding.gasLeakButton)
+        resetButtonAppearance(binding.fallenTreeButton)
+        when (selected) {
+            "Flooding" -> binding.floodingButton.alpha = 0.5f
+            "Building Collapse" -> binding.buildingCollapseButton.alpha = 0.5f
+            "Gas Leak" -> binding.gasLeakButton.alpha = 0.5f
+            "Fallen Tree" -> binding.fallenTreeButton.alpha = 0.5f
+        }
+    }
+
+    private fun resetButtonAppearance(button: LinearLayout) { button.alpha = 1.0f }
+
+    private fun updateEmergencyText(text: String) {
+        binding.title.text = text
+        binding.title.setTextColor(resources.getColor(android.R.color.holo_red_dark))
+    }
+
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun getLastLocation() {
+        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                latitude = loc.latitude
+                longitude = loc.longitude
+                FetchBarangayAddressTask(this, latitude, longitude).execute()
+            } else {
+                Toast.makeText(this, "Unable to get current location", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun handleFetchedAddress(address: String?) {
+        exactLocation = address ?: "Unknown Location"
+    }
+
+    private fun anyToString(v: Any?): String = when (v) {
+        is String -> v
+        is Number -> v.toString()
+        else -> ""
+    }
+
+    private fun anyToDouble(v: Any?): Double = when (v) {
+        is Double -> v
+        is Long -> v.toDouble()
+        is Int -> v.toDouble()
+        is Float -> v.toDouble()
+        is String -> v.toDoubleOrNull() ?: 0.0
+        else -> 0.0
+    }
+
+    private fun readStationProfile(
+        stationNode: String,
+        onDone: (StationInfo?) -> Unit
+    ) {
+        val db = FirebaseDatabase.getInstance().reference
+        val profileKey = profileKeyByStation[stationNode] ?: return onDone(null)
+        db.child(stationNode).child(profileKey).get()
+            .addOnSuccessListener { s ->
+                if (!s.exists()) { onDone(null); return@addOnSuccessListener }
+                val name = anyToString(s.child("name").value).ifEmpty { stationNode }
+                val contact = anyToString(s.child("contact").value)
+                val lat = anyToDouble(s.child("latitude").value)
+                val lon = anyToDouble(s.child("longitude").value)
+                val reportNode = otherEmergencyNodeByStation[stationNode] ?: return@addOnSuccessListener onDone(null)
+                onDone(StationInfo(stationNode, name, contact, lat, lon, reportNode))
+            }
+            .addOnFailureListener { onDone(null) }
+    }
+
+    private fun sendEmergencyReport(currentTime: Long) {
+        val userId = auth.currentUser?.uid
+        val type = selectedEmergency
+        if (userId == null || type == null) {
+            Toast.makeText(this, "Please select an emergency type", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val userDB = FirebaseDatabase.getInstance().getReference("Users")
+        userDB.child(userId).get()
+            .addOnSuccessListener { snap ->
+                val user = snap.getValue(User::class.java)
+                if (user == null) {
+                    Toast.makeText(this, "User data not found", Toast.LENGTH_SHORT).show()
+                    return@addOnSuccessListener
+                }
+
+                readStationProfile(TARGET_STATION_NODE) { station ->
+                    if (station == null) {
+                        Toast.makeText(this, "Target station profile not found", Toast.LENGTH_SHORT).show()
+                        return@readStationProfile
+                    }
+
+                    val dateFmt = SimpleDateFormat("MM/dd/yy", Locale.getDefault())
+                    val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                    val formattedDate = dateFmt.format(Date(currentTime))
+                    val formattedTime = timeFmt.format(Date(currentTime))
+                    val mapsUrl = "https://www.google.com/maps?q=$latitude,$longitude"
+
+                    val otherEmergency = OtherEmergency(
+                        emergencyType = type,
+                        name = user.name.toString(),
+                        contact = user.contact.toString(),
+                        date = formattedDate,
+                        reportTime = formattedTime,
+                        latitude = latitude.toString(),
+                        longitude = longitude.toString(),
+                        location = mapsUrl,
+                        exactLocation = exactLocation,
+                        lastReportedTime = currentTime,
+                        timestamp = currentTime,
+                        read = false,
+                        fireStationName = station.name
+                    )
+
+                    val db = FirebaseDatabase.getInstance().reference
+                    db.child(station.stationNode)
+                        .child(station.reportNode) // e.g., MabiniOtherEmergency
+                        .push()
+                        .setValue(otherEmergency)
+                        .addOnSuccessListener {
+                            lastReportTime = currentTime
+                            Toast.makeText(this, "Emergency report submitted to ${station.name}", Toast.LENGTH_SHORT).show()
+                            sendSMSNotificationToStation(
+                                stationContact = station.contact.ifEmpty { "N/A" },
+                                emergency = otherEmergency
+                            )
+                            startActivity(Intent(this, DashboardActivity::class.java))
+                            finish()
+                        }
+                        .addOnFailureListener {
+                            Toast.makeText(this, "Failed to submit emergency report: ${it.message}", Toast.LENGTH_SHORT).show()
+                        }
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to fetch user data: ${it.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun sendSMSNotificationToStation(stationContact: String, emergency: OtherEmergency) {
+        if (stationContact.isEmpty() || stationContact == "N/A") {
+            Toast.makeText(this, "Fire station contact not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val message = """
+            OTHER EMERGENCY REPORT
+            Type: ${emergency.emergencyType}
+            Name: ${emergency.name}
+            Date: ${emergency.date}
+            Time: ${emergency.reportTime}
+            Location: ${emergency.exactLocation}
+            Maps: ${emergency.location}
+        """.trimIndent()
+
+        try {
+            if (message.length > 160) {
+                val parts = SmsManager.getDefault().divideMessage(message)
+                SmsManager.getDefault().sendMultipartTextMessage(stationContact, null, parts, null, null)
+            } else {
+                SmsManager.getDefault().sendTextMessage(stationContact, null, message, null, null)
+            }
+            Toast.makeText(this, "SMS sent to $stationContact", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e("OtherEmergency", "Failed to send SMS: ${e.message}")
+            Toast.makeText(this, "Failed to send SMS: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+        val results = FloatArray(1)
+        Location.distanceBetween(lat1, lon1, lat2, lon2, results)
+        return results[0]
+    }
+}

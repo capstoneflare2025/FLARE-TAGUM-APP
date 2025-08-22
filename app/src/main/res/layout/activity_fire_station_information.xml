@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fillViewport="true">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <!-- Header -->
+        <RelativeLayout
+            android:id="@+id/header"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginTop="-10dp"
+            android:layout_marginBottom="8dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+                android:id="@+id/back"
+                android:layout_width="25dp"
+                android:layout_height="25dp"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="8dp"
+                android:src="@drawable/ic_back"
+                android:contentDescription="Back" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:gravity="center"
+                android:text="Information"
+                android:textColor="?android:textColorPrimary"
+                android:textSize="25sp"
+                android:textStyle="bold" />
+
+        </RelativeLayout>
+
+        <!-- Description -->
+        <TextView
+            android:id="@+id/description_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="🚨 Fire stations are critical for rapid emergency response. Save these numbers for use in fire, smoke, or rescue emergencies."
+            android:textSize="17sp"
+            android:gravity="center"
+            android:textColor="?android:textColorPrimary"
+            android:layout_marginTop="60dp"
+            app:layout_constraintTop_toBottomOf="@id/header"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Divider -->
+        <View
+            android:id="@+id/divider1"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="12dp"
+            android:background="#DDDDDD"
+            app:layout_constraintTop_toBottomOf="@id/description_text"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- 🔥 Station Cards -->
+        <!-- Reusable card style for each station -->
+
+        <!-- Card 1 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cuambugan_card"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="6dp"
+            android:layout_marginTop="16dp"
+            app:layout_constraintTop_toBottomOf="@id/divider1"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📍 Cuambugan Fire Station"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/cuambugan_contact"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📞 0912-345-6789"
+                    android:autoLink="phone"
+                    android:textColor="#1E88E5"
+                    android:textSize="18sp"
+                    android:paddingTop="4dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Card 2 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/lafilipina_card"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="6dp"
+            android:layout_marginTop="12dp"
+            app:layout_constraintTop_toBottomOf="@id/cuambugan_card"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📍 LaFilipina Fire Station"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/lafilipina_contact"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📞 0923-456-7890"
+                    android:autoLink="phone"
+                    android:textColor="#1E88E5"
+                    android:textSize="18sp"
+                    android:paddingTop="4dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Card 3 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/mabini_card"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="6dp"
+            android:layout_marginTop="12dp"
+            app:layout_constraintTop_toBottomOf="@id/lafilipina_card"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📍 Mabini Fire Station"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/mabini_contact"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📞 0934-567-8901"
+                    android:autoLink="phone"
+                    android:textColor="#1E88E5"
+                    android:textSize="18sp"
+                    android:paddingTop="4dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- 📝 Emergency Tips -->
+        <TextView
+            android:id="@+id/tips_header"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="📝 Emergency Tips"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:textColor="?android:textColorPrimary"
+            app:layout_constraintTop_toBottomOf="@id/mabini_card"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <TextView
+            android:id="@+id/tips_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="✔️ Stay calm and act quickly.\n\n✔️ Call the nearest fire station.\n\n✔️ Assist the elderly and children.\n\n✔️ Use stairs, not elevators, during a fire.\n\n✔️ Don’t attempt to fight large fires alone."
+            android:textSize="17sp"
+            android:textColor="?android:textColorPrimary"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="32dp"
+            app:layout_constraintTop_toBottomOf="@id/tips_header"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.core.widget.NestedScrollView>

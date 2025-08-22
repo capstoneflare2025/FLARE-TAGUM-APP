@@ -1,0 +1,5 @@
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/rounded_background_report" android:state_enabled="true" />
+    <item android:drawable="@android:color/darker_gray" android:state_enabled="false" />
+</selector>
+

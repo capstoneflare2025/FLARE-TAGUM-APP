@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gray">#B0B0B0</color>
+    <color name="redFire">#E63946</color>
+    <color name="blue">#3A59D1</color>
+    <!-- Color for unread items -->
+    <color name="unread_background">#3A59D1</color> <!-- Red color for unread -->
+
+    <!-- Color for read items with opacity change -->
+    <color name="read_background">#6A8BCC</color> <!-- Green color for read -->
+
+    <color name="background_color">#FFFFFF</color>
+    <color name="text_color">#000000</color>
+
+</resources>

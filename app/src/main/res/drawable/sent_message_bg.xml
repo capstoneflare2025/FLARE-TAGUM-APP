@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#E00024"/> <!-- Background color for the sent message, change to your desired color -->
+    <corners android:radius="16dp"/> <!-- Rounded corners -->
+    <padding android:left="12dp" android:right="12dp" android:top="8dp" android:bottom="8dp"/> <!-- Padding inside the message bubble -->
+</shape>

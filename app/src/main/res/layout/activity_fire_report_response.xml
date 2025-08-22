@@ -1,0 +1,117 @@
+    <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        >
+
+        <!-- Back Button -->
+        <ImageView
+            android:id="@+id/back"
+            android:layout_width="25dp"
+            android:layout_height="25dp"
+            android:layout_marginStart="20dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/ic_back"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+
+        <TextView
+            android:id="@+id/fireStationName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Fire Station Name"
+            android:textSize="25sp"
+            android:layout_marginTop="15dp"
+            android:textColor="?android:textColorPrimary"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+             />
+
+
+
+        <!-- Chat Scrollable Area -->
+        <ScrollView
+            android:id="@+id/scrollView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="40dp"
+            app:layout_constraintTop_toBottomOf="@id/fireStationName"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/chatInputArea"
+            android:fillViewport="true"
+            android:elevation="4dp">
+
+            <LinearLayout
+                android:id="@+id/scrollContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:gravity="start">
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- Chat Input Area -->
+        <LinearLayout
+            android:id="@+id/chatInputArea"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:background="#FFFFFF"
+            app:layout_constraintBottom_toBottomOf="parent"
+            android:elevation="8dp">
+
+            <!-- Camera Icon -->
+            <ImageView
+                android:id="@+id/cameraIcon"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:src="@drawable/ic_camera"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="Camera icon" />
+
+            <!-- Camera Icon -->
+            <ImageView
+                android:id="@+id/galleryIcon"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:src="@drawable/ic_gallery"
+                android:layout_marginEnd="16dp"
+                 />
+
+            <!-- Message Input Field -->
+            <EditText
+                android:id="@+id/messageInput"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:hint="Type message..."
+                android:padding="12dp"
+                android:background="@drawable/input_field_bg"
+                android:textColor="@android:color/black"
+                android:textColorHint="@color/gray"
+                android:inputType="textMultiLine"
+                android:maxLines="5"
+                android:scrollbars="vertical"
+                android:scrollHorizontally="false"
+                android:textSize="18sp" />
+
+            <!-- Send Button -->
+            <ImageView
+
+                android:id="@+id/sendButton"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:src="@drawable/icon_send"
+                android:layout_marginStart="16dp"
+
+                />
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
