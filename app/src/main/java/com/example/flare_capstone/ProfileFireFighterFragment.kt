@@ -31,8 +31,11 @@ class ProfileFireFighterFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        // Show logged-in email in the "Full Name" section
+        val email = FirebaseAuth.getInstance().currentUser?.email ?: "Unknown"
+        binding.fullName.text = email
 
-        _binding?.logout?.setOnClickListener {
+        binding.logout.setOnClickListener {
             val inflater = requireActivity().layoutInflater
             val dialogView = inflater.inflate(R.layout.dialog_logout, null)
             val logoImageView = dialogView.findViewById<ImageView>(R.id.logoImageView)
@@ -51,6 +54,7 @@ class ProfileFireFighterFragment : Fragment() {
                 .show()
         }
     }
+
 
     override fun onDestroyView() {
         _binding = null

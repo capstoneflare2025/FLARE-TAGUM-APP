@@ -2,6 +2,7 @@
 package com.example.flare_capstone
 
 import android.Manifest
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Context.RECEIVER_NOT_EXPORTED
@@ -10,6 +11,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
 import android.net.ConnectivityManager
+import android.os.Build
 import android.os.Bundle
 import android.telephony.SmsManager
 import android.telephony.TelephonyManager
@@ -35,16 +37,26 @@ class ReportSmsActivity : AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var db: AppDatabase
 
+    // Tagum City rough bounding box
+    private val TAGUM_LAT_MIN = 7.36
+    private val TAGUM_LAT_MAX = 7.56
+    private val TAGUM_LNG_MIN = 125.72
+    private val TAGUM_LNG_MAX = 125.92
+
     private val fireStations = listOf(
         FireStation("Canocotan Fire Station", "09663041569", 7.421638716369967, 125.79003926707807),
-        FireStation("Mabini Fire Station",    "09750647852", 7.448550457842499, 125.79504707330591),
-        FireStation("La Filipina Fire Station","09750647852", 7.476713240813215, 125.80535752243352)
+        FireStation("Mabini Fire Station", "09750647852", 7.448550457842499, 125.79504707330591),
+        FireStation("La Filipina Fire Station", "09750647852", 7.476713240813215, 125.80535752243352)
     )
 
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
     private val SMS_PERMISSION_REQUEST_CODE = 101
 
-    companion object { const val SMS_SENT_ACTION = "SMS_SENT_ACTION" }
+    companion object {
+        const val SMS_SENT_ACTION = "SMS_SENT_ACTION"
+        const val EXTRA_TO = "extra_to"
+        const val EXTRA_STATION = "extra_station"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,6 +96,10 @@ class ReportSmsActivity : AppCompatActivity() {
 
             getCurrentLocation { userLocation ->
                 if (userLocation != null) {
+                    if (!isWithinTagumCity(userLocation)) {
+                        Toast.makeText(this, "Reporting restricted to Tagum City only.", Toast.LENGTH_LONG).show()
+                        return@getCurrentLocation
+                    }
                     val nearestStation = getNearestFireStation(userLocation)
                     val fullMessage = buildReportMessage(name, location, fireReport, nearestStation.name)
                     confirmSendSms(nearestStation.contact, fullMessage, userLocation, nearestStation.name)
@@ -96,8 +112,13 @@ class ReportSmsActivity : AppCompatActivity() {
 
     private val smsSentReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            val to = intent?.getStringExtra(EXTRA_TO).orEmpty()
+            val station = intent?.getStringExtra(EXTRA_STATION).orEmpty()
             when (resultCode) {
-                AppCompatActivity.RESULT_OK -> Toast.makeText(applicationContext, "Report SMS sent.", Toast.LENGTH_SHORT).show()
+                AppCompatActivity.RESULT_OK -> {
+                    // no separate Contacts node; number is already embedded in the report details
+                    Toast.makeText(applicationContext, "Report SMS sent.", Toast.LENGTH_SHORT).show()
+                }
                 SmsManager.RESULT_ERROR_GENERIC_FAILURE,
                 SmsManager.RESULT_ERROR_NO_SERVICE,
                 SmsManager.RESULT_ERROR_NULL_PDU,
@@ -134,19 +155,38 @@ class ReportSmsActivity : AppCompatActivity() {
         """.trimIndent()
     }
 
-    // Map display name -> station node only; child is always "SmsReport"
     private fun stationNodeFor(name: String): String? {
         val n = name.trim().lowercase()
         return when {
-            "mabini" in n        -> "MabiniFireStation"
-            "canocotan" in n     -> "CanocotanFireStation"
-            "la filipina" in n ||
-                    "lafilipina" in n    -> "LaFilipinaFireStation"
+            "mabini" in n -> "MabiniFireStation"
+            "canocotan" in n -> "CanocotanFireStation"
+            "la filipina" in n || "lafilipina" in n -> "LaFilipinaFireStation"
             else -> null
         }
     }
 
-    // Sync pending Room items to: <Station>/SmsReport
+    private fun smsChildNodeFor(stationName: String): String {
+        val n = stationName.trim().lowercase()
+        return when {
+            "mabini" in n -> "MabiniSmsReport"
+            "canocotan" in n -> "CanocotanSmsReport"
+            "la filipina" in n || "lafilipina" in n -> "LaFilipinaSmsReport"
+            else -> "SmsReport"
+        }
+    }
+
+    private fun contactForStationName(stationName: String): String? {
+        val target = stationName.trim().lowercase()
+        return fireStations.firstOrNull { it.name.trim().lowercase().contains(target) || target.contains(it.name.trim().lowercase()) }?.contact
+            ?: when {
+                "mabini" in target -> "09750647852"
+                "canocotan" in target -> "09663041569"
+                "la filipina" in target || "lafilipina" in target -> "09750647852"
+                else -> null
+            }
+    }
+
+    // Push to <StationNode>/<StationSmsChild>/<pushId> and embed the SMS number in the same report details
     private fun uploadPendingReports(db: AppDatabase) {
         val dao = db.reportDao()
         val root = FirebaseDatabase.getInstance().reference
@@ -155,6 +195,8 @@ class ReportSmsActivity : AppCompatActivity() {
             val pendingReports = dao.getPendingReports()
             for (report in pendingReports) {
                 val stationNode = stationNodeFor(report.fireStationName)
+                val smsChild = smsChildNodeFor(report.fireStationName)
+                val contactUsed = contactForStationName(report.fireStationName) ?: ""
 
                 val reportMap = mapOf(
                     "name" to report.name,
@@ -165,18 +207,20 @@ class ReportSmsActivity : AppCompatActivity() {
                     "latitude" to report.latitude,
                     "longitude" to report.longitude,
                     "fireStationName" to report.fireStationName,
-                    "status" to "sent"
+                    "contact" to contactUsed,        // embedded here
+                    "status" to "pending"
                 )
 
-                val task = if (stationNode != null) {
-                    root.child(stationNode).child("SmsReport").push().setValue(reportMap)
+                val ref = if (stationNode != null) {
+                    root.child(stationNode).child(smsChild)
                 } else {
-                    root.child("SmsReport").push().setValue(reportMap)
+                    root.child(smsChild)
                 }
 
-                task.addOnSuccessListener {
-                    CoroutineScope(Dispatchers.IO).launch { dao.deleteReport(report.id) }
-                }
+                ref.push().setValue(reportMap)
+                    .addOnSuccessListener {
+                        CoroutineScope(Dispatchers.IO).launch { dao.deleteReport(report.id) }
+                    }
             }
         }
     }
@@ -191,6 +235,12 @@ class ReportSmsActivity : AppCompatActivity() {
         val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val sdfTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         return Pair(sdfDate.format(Date()), sdfTime.format(Date()))
+    }
+
+    private fun isWithinTagumCity(loc: Location): Boolean {
+        val lat = loc.latitude
+        val lng = loc.longitude
+        return lat in TAGUM_LAT_MIN..TAGUM_LAT_MAX && lng in TAGUM_LNG_MIN..TAGUM_LNG_MAX
     }
 
     private fun confirmSendSms(phoneNumber: String, message: String, userLocation: Location, stationName: String) {
@@ -219,7 +269,7 @@ class ReportSmsActivity : AppCompatActivity() {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@ReportSmsActivity, "Report saved locally (pending).", Toast.LENGTH_SHORT).show()
                         if (isInternetAvailable()) uploadPendingReports(db)
-                        sendSms(phoneNumber, message)
+                        sendSms(phoneNumber, message, stationName)
                     }
                 }
             }
@@ -227,20 +277,35 @@ class ReportSmsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun sendSms(phoneNumber: String, message: String) {
+    private fun sendSms(phoneNumber: String, message: String, stationName: String) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), SMS_PERMISSION_REQUEST_CODE)
             return
         }
         try {
             val smsManager = SmsManager.getDefault()
+
+            val sentIntent = Intent(SMS_SENT_ACTION).apply {
+                putExtra(EXTRA_TO, phoneNumber)
+                putExtra(EXTRA_STATION, stationName)
+            }
+            val flags = if (Build.VERSION.SDK_INT >= 23) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val sentPI = PendingIntent.getBroadcast(this, 0, sentIntent, flags)
+
             if (message.length > 160) {
                 val parts = smsManager.divideMessage(message)
-                smsManager.sendMultipartTextMessage(phoneNumber, null, parts, null, null)
+                val sentIntents = MutableList(parts.size) { sentPI }
+                smsManager.sendMultipartTextMessage(phoneNumber, null, parts,
+                    sentIntents as ArrayList<PendingIntent?>?, null)
             } else {
-                smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+                smsManager.sendTextMessage(phoneNumber, null, message, sentPI, null)
             }
-            Toast.makeText(this, "SMS sent to $phoneNumber", Toast.LENGTH_LONG).show()
+
+            Toast.makeText(this, "SMS sending…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Send failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -303,7 +368,8 @@ class ReportSmsActivity : AppCompatActivity() {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) getCurrentLocation { }
                 else Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
             SMS_PERMISSION_REQUEST_CODE ->
-                Toast.makeText(this,
+                Toast.makeText(
+                    this,
                     if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) "SMS permission granted" else "SMS permission denied",
                     Toast.LENGTH_SHORT
                 ).show()
