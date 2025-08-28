@@ -44,9 +44,9 @@ class ReportSmsActivity : AppCompatActivity() {
     private val TAGUM_LNG_MAX = 125.92
 
     private val fireStations = listOf(
-        FireStation("Canocotan Fire Station", "09673060785", 7.421638716369967, 125.79003926707807),
-        FireStation("Mabini Fire Station", "09663041569", 7.448550457842499, 125.79504707330591),
-        FireStation("La Filipina Fire Station", "09750647852", 7.476713240813215, 125.80535752243352)
+        FireStation("Canocotan Fire Station", "09673060785", 7.4217617292640785, 125.79018416901866),
+        FireStation("Mabini Fire Station", "09663041569", 7.450150854535532, 125.79529166335233),
+        FireStation("La Filipina Fire Station", "09750647852", 7.4768350720999655, 125.8054726056261)
     )
 
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
