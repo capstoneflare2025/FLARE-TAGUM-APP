@@ -1,37 +1,27 @@
 {
   "project_info": {
-    "project_number": "272168206378",
-    "firebase_url": "https://flare-capstone-468319-default-rtdb.firebaseio.com",
-    "project_id": "flare-capstone-468319",
-    "storage_bucket": "flare-capstone-468319.firebasestorage.app"
+    "project_number": "685814202928",
+    "firebase_url": "https://capstone-flare-2025-default-rtdb.firebaseio.com",
+    "project_id": "capstone-flare-2025",
+    "storage_bucket": "capstone-flare-2025.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:272168206378:android:79fcadd3b086a8c5cc8353",
+        "mobilesdk_app_id": "1:685814202928:android:95954077c4ae4104c9a3f5",
         "android_client_info": {
           "package_name": "com.example.flare_capstone"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "272168206378-binqj9b8tf0bva5epfvdc3c4tl6ttkvj.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyA9ClitVsiLBwwDzb0vUmc1AwCKGNX10Mk"
+          "current_key": "AIzaSyD7wOCBogPAIL3fN2PMVz5LipTDllnpLFk"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "272168206378-binqj9b8tf0bva5epfvdc3c4tl6ttkvj.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

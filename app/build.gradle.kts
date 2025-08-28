@@ -98,7 +98,7 @@ dependencies {
     implementation("org.osmdroid:osmdroid-android:6.1.18") // OSM map
     implementation("com.google.android.gms:play-services-location:21.2.0")// fused location
     implementation("androidx.preference:preference-ktx:1.2.1")
-
+    implementation("com.google.firebase:firebase-database:22.0.0")
 
 }
 
