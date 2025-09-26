@@ -1,10 +1,10 @@
 package com.example.flare_capstone
 
 import android.Manifest
-import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.location.Location
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -16,17 +16,15 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.example.flare_capstone.databinding.FragmentHomeFireFighterBinding
 import com.google.android.gms.location.*
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import org.json.JSONArray
 import org.json.JSONObject
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polyline
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -35,7 +33,7 @@ import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-class HomeFireFighterFragment : Fragment() {
+class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
 
     private val TAG = "HomeFF"
 
@@ -45,24 +43,24 @@ class HomeFireFighterFragment : Fragment() {
     private lateinit var auth: FirebaseAuth
     private lateinit var fusedLocation: FusedLocationProviderClient
 
-    // OSM
-    private lateinit var map: MapView
+    // Google Maps
+    private var gMap: GoogleMap? = null
 
     // Pins + route
-    private var myPin: Marker? = null
-    private var incidentPin: Marker? = null
+    private var myMarker: Marker? = null
+    private var incidentMarker: Marker? = null
     private var routeLine: Polyline? = null
 
     // Station + DB paths
     private var stationPrefix: String? = null
-    private var fireReportPath: String? = null          // e.g. MabiniFireStation/MabiniFireReport
-    private var otherEmergencyPath: String? = null      // e.g. MabiniFireStation/MabiniOtherEmergency
+    private var fireReportPath: String? = null
+    private var otherEmergencyPath: String? = null
 
     // Current pick
     private var ongoingIncidentId: String? = null
     private var ongoingIncidentSource: Source? = null
-    private var currentReportPoint: GeoPoint? = null
-    private var lastMyPoint: GeoPoint? = null
+    private var currentReportPoint: LatLng? = null
+    private var lastMyPoint: LatLng? = null
 
     // Listeners
     private var fireListener: ValueEventListener? = null
@@ -74,10 +72,15 @@ class HomeFireFighterFragment : Fragment() {
     private var fireSnap: DataSnapshot? = null
     private var otherSnap: DataSnapshot? = null
 
-    // Routing (OSRM)
+    // Camera recenter thresholds
+    private var lastCameraMy: LatLng? = null
+    private var lastCameraIncident: LatLng? = null
+    private val recenterMeters = 25f
+
+    // Routing throttle
     private val bg = Executors.newSingleThreadExecutor()
-    private var lastRoutedOrigin: GeoPoint? = null
-    private var lastRoutedDest: GeoPoint? = null
+    private var lastRoutedOrigin: LatLng? = null
+    private var lastRoutedDest: LatLng? = null
     private val routeRecomputeMeters = 25f
 
     private enum class Source { FIRE, OTHER }
@@ -92,7 +95,8 @@ class HomeFireFighterFragment : Fragment() {
     ) { grant ->
         val ok = (grant[Manifest.permission.ACCESS_FINE_LOCATION] == true) ||
                 (grant[Manifest.permission.ACCESS_COARSE_LOCATION] == true)
-        if (ok) startLocationUpdates() else Log.w(TAG, "Location permission denied; routing limited")
+        if (ok) startLocationUpdates() else Log.w(TAG, "Location permission denied; navigation limited")
+        enableMyLocationUiIfPermitted()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -107,19 +111,15 @@ class HomeFireFighterFragment : Fragment() {
         auth = FirebaseAuth.getInstance()
         fusedLocation = LocationServices.getFusedLocationProviderClient(requireContext())
 
-        // OSM config
-        val appCtx = requireContext().applicationContext
-        Configuration.getInstance().load(
-            appCtx,
-            appCtx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
-        )
-        Configuration.getInstance().userAgentValue = appCtx.packageName
-
-        // Map init
-        map = binding.osmMap
-        map.setTileSource(TileSourceFactory.MAPNIK)
-        map.setMultiTouchControls(true)
-        map.controller.setZoom(15.0)
+        // Attach a SupportMapFragment into mapContainer
+        val existing = childFragmentManager.findFragmentById(binding.mapContainer.id) as? SupportMapFragment
+        val mapFragment = existing ?: SupportMapFragment.newInstance().also {
+            childFragmentManager.beginTransaction()
+                .replace(binding.mapContainer.id, it)
+                .commit()
+            childFragmentManager.executePendingTransactions()
+        }
+        mapFragment.getMapAsync(this)
 
         // Station select from email
         stationPrefix = when (auth.currentUser?.email?.lowercase()) {
@@ -135,7 +135,7 @@ class HomeFireFighterFragment : Fragment() {
 
         val base = "${stationPrefix}FireStation"
         fireReportPath     = "$base/${stationPrefix}FireReport"
-        otherEmergencyPath = "$base/${stationPrefix}OtherEmergency" // adjust if your node name differs
+        otherEmergencyPath = "$base/${stationPrefix}OtherEmergency"
 
         binding.completed.setOnClickListener { markCompleted() }
 
@@ -143,20 +143,9 @@ class HomeFireFighterFragment : Fragment() {
         ensureLocationPermission()
     }
 
-    override fun onResume() {
-        super.onResume()
-        binding.osmMap.onResume()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        binding.osmMap.onPause()
-    }
-
     override fun onDestroyView() {
         detachReportListeners()
         stopLocationUpdates()
-        routeLine?.let { map.overlayManager.remove(it) }
         _binding = null
         super.onDestroyView()
     }
@@ -171,52 +160,92 @@ class HomeFireFighterFragment : Fragment() {
     }
 
     private fun ensureLocationPermission() {
-        if (hasLocationPermission()) startLocationUpdates() else reqPerms.launch(locationPerms)
+        if (hasLocationPermission()) {
+            startLocationUpdates()
+            enableMyLocationUiIfPermitted()
+        } else {
+            reqPerms.launch(locationPerms)
+        }
+    }
+
+    private fun enableMyLocationUiIfPermitted() {
+        try {
+            if (hasLocationPermission()) {
+                gMap?.isMyLocationEnabled = true
+                gMap?.uiSettings?.isMyLocationButtonEnabled = true
+            }
+        } catch (_: SecurityException) { /* ignore */ }
     }
 
     // ---------- Map + Markers ----------
 
-    private fun updatePins(myLoc: GeoPoint?, reportLoc: GeoPoint?) {
+    override fun onMapReady(map: GoogleMap) {
+        gMap = map
+        gMap?.uiSettings?.isZoomControlsEnabled = true
+        gMap?.uiSettings?.isCompassEnabled = true
+        gMap?.isTrafficEnabled = true
+        gMap?.moveCamera(CameraUpdateFactory.zoomTo(15f))
+        enableMyLocationUiIfPermitted()
+
+        updatePins(lastMyPoint, currentReportPoint)
+    }
+
+    private fun updatePins(myLoc: LatLng?, reportLoc: LatLng?) {
+        val map = gMap ?: return
+
         if (myLoc != null) {
             lastMyPoint = myLoc
-            if (myPin == null) {
-                myPin = Marker(map).apply {
-                    position = myLoc
-                    title = "You"
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                }
-                map.overlays.add(myPin)
+            if (myMarker == null) {
+                myMarker = map.addMarker(
+                    MarkerOptions()
+                        .position(myLoc)
+                        .title("You")
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
+                )
             } else {
-                myPin?.position = myLoc
+                myMarker?.position = myLoc
             }
         }
 
         if (reportLoc != null) {
-            if (incidentPin == null) {
-                incidentPin = Marker(map).apply {
-                    position = reportLoc
-                    title = "Incident"
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                }
-                map.overlays.add(incidentPin)
+            if (incidentMarker == null) {
+                incidentMarker = map.addMarker(
+                    MarkerOptions()
+                        .position(reportLoc)
+                        .title("Incident")
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                )
             } else {
-                incidentPin?.position = reportLoc
+                incidentMarker?.position = reportLoc
             }
         }
 
-        val pts = mutableListOf<GeoPoint>()
-        myLoc?.let { pts += it }
-        reportLoc?.let { pts += it }
+        // Camera (recenter if moved)
+        val needRecenter =
+            (lastCameraMy == null || (myLoc != null && distanceMeters(lastCameraMy!!, myLoc) > recenterMeters)) ||
+                    (lastCameraIncident == null || (reportLoc != null && distanceMeters(lastCameraIncident!!, reportLoc) > recenterMeters))
 
-        when (pts.size) {
-            1 -> { map.controller.setZoom(15.0); map.controller.animateTo(pts.first()) }
-            2 -> {
-                val bb = BoundingBox.fromGeoPoints(pts)
-                try { map.zoomToBoundingBox(bb, true, 120) } catch (_: Throwable) { map.zoomToBoundingBox(bb, true) }
+        if (needRecenter) {
+            when {
+                myLoc != null && reportLoc != null -> {
+                    val bounds = LatLngBounds.builder().include(myLoc).include(reportLoc).build()
+                    try { map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 120)) }
+                    catch (_: Exception) { map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 120)) }
+                    lastCameraMy = myLoc
+                    lastCameraIncident = reportLoc
+                }
+                myLoc != null -> {
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(myLoc, 15f))
+                    lastCameraMy = myLoc
+                }
+                reportLoc != null -> {
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(reportLoc, 15f))
+                    lastCameraIncident = reportLoc
+                }
             }
         }
-        map.invalidate()
 
+        // Trigger routing if both points exist and moved enough
         val origin = lastMyPoint
         val dest = currentReportPoint
         if (origin != null && dest != null && shouldRecomputeRoutes(origin, dest)) {
@@ -224,24 +253,7 @@ class HomeFireFighterFragment : Fragment() {
         }
     }
 
-    private fun shouldRecomputeRoutes(origin: GeoPoint, dest: GeoPoint): Boolean {
-        val prevO = lastRoutedOrigin
-        val prevD = lastRoutedDest
-        if (prevO == null || prevD == null) {
-            lastRoutedOrigin = origin
-            lastRoutedDest = dest
-            return true
-        }
-        val movedO = distanceMeters(prevO, origin)
-        val movedD = distanceMeters(prevD, dest)
-        return if (movedO > routeRecomputeMeters || movedD > routeRecomputeMeters) {
-            lastRoutedOrigin = origin
-            lastRoutedDest = dest
-            true
-        } else false
-    }
-
-    private fun distanceMeters(a: GeoPoint, b: GeoPoint): Float {
+    private fun distanceMeters(a: LatLng, b: LatLng): Float {
         val res = FloatArray(1)
         Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, res)
         return res[0]
@@ -251,7 +263,7 @@ class HomeFireFighterFragment : Fragment() {
     private val locCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val last: Location = result.lastLocation ?: return
-            updatePins(GeoPoint(last.latitude, last.longitude), currentReportPoint)
+            updatePins(LatLng(last.latitude, last.longitude), currentReportPoint)
         }
     }
 
@@ -277,7 +289,6 @@ class HomeFireFighterFragment : Fragment() {
         val firePath = fireReportPath ?: return
         val otherPath = otherEmergencyPath ?: return
 
-        // status == "Ongoing" on both nodes. Limit to reasonable number.
         fireQuery = FirebaseDatabase.getInstance().getReference(firePath)
             .orderByChild("status")
             .equalTo("Ongoing")
@@ -325,14 +336,13 @@ class HomeFireFighterFragment : Fragment() {
     private fun recomputePick() {
         var newestTs = Long.MIN_VALUE
         var pickId: String? = null
-        var pickPt: GeoPoint? = null
+        var pickPt: LatLng? = null
         var pickSrc: Source? = null
 
         var total = 0
         var ongoingCount = 0
-        val tsSamples = mutableListOf<Long>()
 
-        // Scan FireReport: timestamp key = "timeStamp"
+        // FireReport: "timeStamp"
         fireSnap?.let { snap ->
             for (c in snap.children) {
                 total++
@@ -341,18 +351,17 @@ class HomeFireFighterFragment : Fragment() {
                 val ts = c.child("timeStamp").getValue(Long::class.java) ?: 0L
                 if (lat != null && lon != null && ts > 0) {
                     ongoingCount++
-                    tsSamples += ts
                     if (ts > newestTs) {
                         newestTs = ts
                         pickId = c.key
-                        pickPt = GeoPoint(lat, lon)
+                        pickPt = LatLng(lat, lon)
                         pickSrc = Source.FIRE
                     }
                 }
             }
         }
 
-        // Scan OtherEmergency: timestamp key = "timestamp"
+        // OtherEmergency: "timestamp"
         otherSnap?.let { snap ->
             for (c in snap.children) {
                 total++
@@ -361,11 +370,10 @@ class HomeFireFighterFragment : Fragment() {
                 val ts = c.child("timestamp").getValue(Long::class.java) ?: 0L
                 if (lat != null && lon != null && ts > 0) {
                     ongoingCount++
-                    tsSamples += ts
                     if (ts > newestTs) {
                         newestTs = ts
                         pickId = c.key
-                        pickPt = GeoPoint(lat, lon)
+                        pickPt = LatLng(lat, lon)
                         pickSrc = Source.OTHER
                     }
                 }
@@ -376,10 +384,10 @@ class HomeFireFighterFragment : Fragment() {
             ongoingIncidentId = null
             ongoingIncidentSource = null
             currentReportPoint = null
-            clearRouteOnly()
-            incidentPin?.let { map.overlays.remove(it); incidentPin = null; map.invalidate() }
-            updatePins(myPin?.position, null)
-            Log.d(TAG, "No ongoing reports after scan; total=$total ongoingCount=$ongoingCount tsSamples=$tsSamples moreTs=${tsSamples.size}")
+            routeLine?.remove(); routeLine = null
+            incidentMarker?.let { it.remove(); incidentMarker = null }
+            updatePins(lastMyPoint, null)
+            Log.d(TAG, "No ongoing reports; total=$total ongoingCount=$ongoingCount")
             return
         }
 
@@ -387,7 +395,7 @@ class HomeFireFighterFragment : Fragment() {
         ongoingIncidentSource = pickSrc
         currentReportPoint = pickPt
         Log.d(TAG, "Picked ongoing ${pickSrc.name} id=$pickId ts=$newestTs at $pickPt")
-        updatePins(myPin?.position, currentReportPoint)
+        updatePins(lastMyPoint, currentReportPoint)
     }
 
     private fun getDoubleRelaxed(node: DataSnapshot, key: String): Double? {
@@ -410,57 +418,66 @@ class HomeFireFighterFragment : Fragment() {
             .getReference("$path/$id")
             .child("status")
             .setValue("Completed")
-        clearRouteOnly()
-        incidentPin?.let { map.overlays.remove(it); incidentPin = null; map.invalidate() }
+        routeLine?.remove(); routeLine = null
+        incidentMarker?.let { it.remove(); incidentMarker = null }
         Log.d(TAG, "Marked completed $id at $src")
     }
 
-    private fun clearRouteOnly() {
-        routeLine?.let { map.overlays.remove(it) }
-        routeLine = null
-        lastRoutedOrigin = null
-        lastRoutedDest = null
-        map.invalidate()
+    // ---------- OSRM routing (free) ----------
+
+    private fun shouldRecomputeRoutes(origin: LatLng, dest: LatLng): Boolean {
+        val prevO = lastRoutedOrigin
+        val prevD = lastRoutedDest
+        if (prevO == null || prevD == null) {
+            lastRoutedOrigin = origin
+            lastRoutedDest = dest
+            return true
+        }
+        val movedO = distanceMeters(prevO, origin)
+        val movedD = distanceMeters(prevD, dest)
+        return if (movedO > routeRecomputeMeters || movedD > routeRecomputeMeters) {
+            lastRoutedOrigin = origin
+            lastRoutedDest = dest
+            true
+        } else false
     }
 
-    // ---------- OSRM Routing ----------
-
     private data class OsrmRoute(
-        val points: List<GeoPoint>,
+        val points: List<LatLng>,
         val durationSec: Long,
         val distanceMeters: Long
     )
 
-    private fun fetchAndDrawOsrmRoute(origin: GeoPoint, dest: GeoPoint) {
+    private fun fetchAndDrawOsrmRoute(origin: LatLng, dest: LatLng) {
         bg.execute {
             val res = fetchOsrmRoute(origin, dest)
             requireActivity().runOnUiThread {
+                val map = gMap ?: return@runOnUiThread
                 if (res == null || res.points.isEmpty()) {
-                    clearRouteOnly()
+                    routeLine?.remove(); routeLine = null
                     Toast.makeText(requireContext(), "No route found", Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
 
-                routeLine?.let { map.overlays.remove(it) }
-                routeLine = Polyline().apply {
-                    outlinePaint.color = Color.parseColor("#2962FF")
-                    outlinePaint.strokeWidth = 12f
-                    setPoints(res.points)
-                }
-                map.overlays.add(routeLine)
+                routeLine?.remove()
+                routeLine = map.addPolyline(
+                    PolylineOptions()
+                        .addAll(res.points)
+                        .color(0xFF2962FF.toInt()) // blue
+                        .width(12f)
+                )
 
                 val mins = max(1, (res.durationSec / 60).toInt())
                 val km = (res.distanceMeters / 100.0).roundToInt() / 10.0
-                incidentPin?.title = "Incident • ${mins}m • ${km}km"
-                incidentPin?.showInfoWindow()
+                incidentMarker?.snippet = "${mins}m • ${km}km"
+                incidentMarker?.showInfoWindow()
 
-                map.invalidate()
                 Log.d(TAG, "OSRM route drawn: ${mins}m, ${km}km, pts=${res.points.size}")
             }
         }
     }
 
-    private fun fetchOsrmRoute(origin: GeoPoint, dest: GeoPoint): OsrmRoute? {
+    private fun fetchOsrmRoute(origin: LatLng, dest: LatLng): OsrmRoute? {
         val servers = listOf(
             "https://router.project-osrm.org",
             "https://routing.openstreetmap.de/routed-car"
@@ -491,7 +508,7 @@ class HomeFireFighterFragment : Fragment() {
             val code = conn.responseCode
             val reader = (if (code in 200..299) conn.inputStream else conn.errorStream)
             val resp = BufferedReader(InputStreamReader(reader)).use { it.readText() }
-            Log.d(TAG, "OSRM code=$code body=${resp.take(200)}")
+            Log.d(TAG, "OSRM code=$code body=${resp.take(160)}")
             if (code !in 200..299) return null
 
             val root = JSONObject(resp)
@@ -502,7 +519,7 @@ class HomeFireFighterFragment : Fragment() {
             val poly = r0.optString("geometry")
             val durSec = (r0.optDouble("duration", 0.0)).toLong()
             val dist = (r0.optDouble("distance", 0.0)).toLong()
-            val pts = decodePolylineE5ToGeo(poly)
+            val pts = decodePolylineE5ToLatLng(poly)
             if (pts.isEmpty()) null else OsrmRoute(pts, durSec, dist)
         } catch (e: Exception) {
             Log.w(TAG, "OSRM error: ${e.message}")
@@ -512,9 +529,10 @@ class HomeFireFighterFragment : Fragment() {
         }
     }
 
-    // Polyline precision 5 (OSRM default)
-    private fun decodePolylineE5ToGeo(encoded: String): List<GeoPoint> {
-        val path = ArrayList<GeoPoint>()
+    // Polyline precision 5 (OSRM default) -> List<LatLng> for Google Maps
+    private fun decodePolylineE5ToLatLng(encoded: String): List<LatLng> {
+        if (encoded.isEmpty()) return emptyList()
+        val path = ArrayList<LatLng>()
         var index = 0
         var lat = 0
         var lng = 0
@@ -538,8 +556,27 @@ class HomeFireFighterFragment : Fragment() {
             } while (b >= 0x20)
             val dlng = if ((result and 1) != 0) (result shr 1).inv() else result shr 1
             lng += dlng
-            path.add(GeoPoint(lat / 1E5, lng / 1E5))
+            path.add(LatLng(lat / 1E5, lng / 1E5))
         }
         return path
+    }
+
+    // ---------- Google Maps app navigation (optional fallback) ----------
+
+    private fun openGoogleMapsDirections(origin: LatLng, dest: LatLng) {
+        val uri = Uri.parse(
+            "https://www.google.com/maps/dir/?api=1" +
+                    "&origin=${origin.latitude},${origin.longitude}" +
+                    "&destination=${dest.latitude},${dest.longitude}" +
+                    "&travelmode=driving&dir_action=navigate"
+        )
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            setPackage("com.google.android.apps.maps")
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        }
     }
 }

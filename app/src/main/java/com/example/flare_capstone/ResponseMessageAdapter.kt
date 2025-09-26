@@ -12,10 +12,12 @@ class ResponseMessageAdapter(
     private val responseMessageList: MutableList<ResponseMessage>
 ) : RecyclerView.Adapter<ResponseMessageAdapter.ResponseMessageViewHolder>() {
 
+    // Map display name -> Firebase node
     private val stationNodeByDisplayName = mapOf(
         "La Filipina Fire Station" to "LaFilipinaFireStation",
         "Canocotan Fire Station"   to "CanocotanFireStation",
         "Mabini Fire Station"      to "MabiniFireStation",
+        // fallback if stored as node-safe already
         "LaFilipinaFireStation"    to "LaFilipinaFireStation",
         "CanocotanFireStation"     to "CanocotanFireStation",
         "MabiniFireStation"        to "MabiniFireStation"
@@ -52,7 +54,8 @@ class ResponseMessageAdapter(
 
             root.setOnClickListener {
                 val incidentId = item.incidentId ?: return@setOnClickListener
-                // Optional: mark whole thread read
+
+                // Mark all messages as read
                 FirebaseDatabase.getInstance().reference
                     .child(stationNode).child(reportNode).child(incidentId).child("messages")
                     .get()
@@ -66,20 +69,22 @@ class ResponseMessageAdapter(
                         }
                     }
 
+                // Update adapter item immediately
                 val idx = holder.bindingAdapterPosition
                 if (idx != RecyclerView.NO_POSITION) {
                     responseMessageList[idx].isRead = true
                     notifyItemChanged(idx)
                 }
 
+                // Launch chat activity
                 val intent = Intent(holder.itemView.context, FireReportResponseActivity::class.java).apply {
                     putExtra("UID", item.uid)
-                    putExtra("FIRE_STATION_NAME", displayName)
+                    putExtra("FIRE_STATION_NAME", displayName)  // UI label only
                     putExtra("CONTACT", item.contact)
                     putExtra("NAME", item.reporterName)
-                    putExtra("INCIDENT_ID", item.incidentId)
-                    putExtra("STATION_NODE", stationNode)
-                    putExtra("REPORT_NODE", reportNode)
+                    putExtra("INCIDENT_ID", incidentId)
+                    putExtra("STATION_NODE", stationNode)       // authoritative
+                    putExtra("REPORT_NODE", reportNode)         // authoritative
                 }
                 holder.itemView.context.startActivity(intent)
             }
@@ -93,7 +98,7 @@ class ResponseMessageAdapter(
         if (existingIndex != -1) {
             val oldTs = responseMessageList[existingIndex].timestamp ?: 0L
             val newTs = newMessage.timestamp ?: 0L
-            if (newTs > oldTs) {
+            if (newTs > oldTs || (responseMessageList[existingIndex].isRead != newMessage.isRead)) {
                 responseMessageList[existingIndex] = newMessage
                 notifyItemChanged(existingIndex)
             }

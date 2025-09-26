@@ -99,13 +99,16 @@ class FireReportResponseActivity : AppCompatActivity() {
         val explicitStationNode = intent.getStringExtra("STATION_NODE")
         val explicitReportNode = intent.getStringExtra("REPORT_NODE")
 
-        stationNode = explicitStationNode
-            ?: stationNodeByDisplayName[fireStationName]
-                    ?: "MabiniFireStation"
+        stationNode = explicitStationNode ?: run {
+            Toast.makeText(this, "Station node missing!", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        reportNode = explicitReportNode
-            ?: reportNodeByStationNode[stationNode]
-                    ?: "MabiniFireReport"
+        reportNode = explicitReportNode ?: run {
+            Toast.makeText(this, "Report node missing!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
 
         binding.fireStationName.text = fireStationName.ifEmpty { stationNode }
 
