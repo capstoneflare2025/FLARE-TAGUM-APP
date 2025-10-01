@@ -31,26 +31,34 @@ import android.net.Network
 import android.net.NetworkCapabilities
 
 class DashboardActivity : AppCompatActivity() {
+
+    /* ---------------- View / State ---------------- */
     internal lateinit var binding: ActivityDashboardBinding
     private lateinit var database: DatabaseReference
     private lateinit var sharedPreferences: SharedPreferences
     private var currentUserName: String? = null
     private var user: User? = null
     private var unreadMessageCount: Int = 0
+
+    /* ---------------- Location / Connectivity ---------------- */
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var connectivityManager: ConnectivityManager
     private var loadingDialog: AlertDialog? = null
 
+    /* ---------------- Firebase / Queries ---------------- */
     private val stationNodes = listOf("LaFilipinaFireStation", "CanocotanFireStation", "MabiniFireStation")
-
     private val responseListeners = mutableListOf<Pair<Query, ChildEventListener>>()
 
+    /* ---------------- Network Callback ---------------- */
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) { runOnUiThread { hideLoadingDialog() } }
         override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
     }
 
+    /* =========================================================
+     * Lifecycle
+     * ========================================================= */
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
@@ -100,6 +108,16 @@ class DashboardActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        try { connectivityManager.unregisterNetworkCallback(networkCallback) } catch (_: Exception) {}
+        responseListeners.forEach { (query, listener) -> try { query.removeEventListener(listener) } catch (_: Exception) {} }
+        responseListeners.clear()
+    }
+
+    /* =========================================================
+     * Connectivity / Loading
+     * ========================================================= */
     private fun isConnected(): Boolean {
         val activeNetwork = connectivityManager.activeNetwork ?: return false
         val caps = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
@@ -118,15 +136,13 @@ class DashboardActivity : AppCompatActivity() {
         loadingDialog?.findViewById<TextView>(R.id.loading_message)?.text = message
     }
 
-    private fun hideLoadingDialog() { loadingDialog?.dismiss() }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try { connectivityManager.unregisterNetworkCallback(networkCallback) } catch (_: Exception) {}
-        responseListeners.forEach { (query, listener) -> try { query.removeEventListener(listener) } catch (_: Exception) {} }
-        responseListeners.clear()
+    private fun hideLoadingDialog() {
+        loadingDialog?.dismiss()
     }
 
+    /* =========================================================
+     * Notifications
+     * ========================================================= */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel("default_channel", "General Notifications", NotificationManager.IMPORTANCE_HIGH)
@@ -135,6 +151,83 @@ class DashboardActivity : AppCompatActivity() {
         }
     }
 
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private fun triggerNotification(
+        fireStationName: String?,
+        message: String?,
+        messageId: String,
+        incidentId: String?,
+        reporterName: String?,
+        title: String,
+        stationNode: String
+    ) {
+        val notificationId = (stationNode + "::" + messageId).hashCode()
+        val reportNode = reportNodeFor(stationNode)
+
+        val resultIntent = Intent(this, FireReportResponseActivity::class.java).apply {
+            putExtra("INCIDENT_ID", incidentId)
+            putExtra("FIRE_STATION_NAME", fireStationName)
+            putExtra("NAME", reporterName)
+            putExtra("fromNotification", true)
+            putExtra("STATION_NODE", stationNode)
+            putExtra("REPORT_NODE", reportNode)
+        }
+
+        val pendingIntent = TaskStackBuilder.create(this).run {
+            addNextIntentWithParentStack(Intent(this@DashboardActivity, DashboardActivity::class.java))
+            addNextIntent(resultIntent)
+            getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+
+        val notification = NotificationCompat.Builder(this, "default_channel")
+            .setSmallIcon(R.drawable.ic_logo)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        NotificationManagerCompat.from(this).notify(notificationId, notification)
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private fun triggerStatusChangeNotification(
+        reportId: String,
+        stationNode: String,
+        reporterName: String,
+        status: String
+    ) {
+        val notificationId = (stationNode + "::" + reportId).hashCode()
+
+        val resultIntent = Intent(this, FireReportResponseActivity::class.java).apply {
+            putExtra("REPORT_ID", reportId)
+            putExtra("STATUS", status)
+            putExtra("REPORTER_NAME", reporterName)
+            putExtra("STATION_NODE", stationNode)
+        }
+
+        val pendingIntent = TaskStackBuilder.create(this).run {
+            addNextIntentWithParentStack(Intent(this@DashboardActivity, DashboardActivity::class.java))
+            addNextIntent(resultIntent)
+            getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+
+        val notification = NotificationCompat.Builder(this, "default_channel")
+            .setSmallIcon(R.drawable.ic_logo)
+            .setContentTitle("Status Update: $status")
+            .setContentText("The status of your report has changed to $status.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        NotificationManagerCompat.from(this).notify(notificationId, notification)
+    }
+
+    /* =========================================================
+     * Firebase: Users / Messages
+     * ========================================================= */
     private fun fetchCurrentUserName(callback: (String?) -> Unit) {
         val currentEmail = FirebaseAuth.getInstance().currentUser?.email ?: return callback(null)
         database.child("Users").addListenerForSingleValueEvent(object : ValueEventListener {
@@ -154,16 +247,6 @@ class DashboardActivity : AppCompatActivity() {
         })
     }
 
-    private fun updateInboxBadge(count: Int) {
-        val activity = this // Get the hosting activity (DashboardActivity)
-        if (activity is DashboardActivity) {  // Check if it's the correct activity type
-            val badge = activity.binding.bottomNavigation.getOrCreateBadge(R.id.inboxFragment) // Access the bottom navigation view
-            badge.isVisible = count > 0
-            badge.number = count
-            badge.maxCharacterCount = 3
-        }
-    }
-
     private fun updateUnreadMessageCount() {
         val myContact = user?.contact?.trim().orEmpty()
         val myName = currentUserName?.trim().orEmpty()
@@ -171,7 +254,7 @@ class DashboardActivity : AppCompatActivity() {
         if (myContact.isEmpty() && myName.isEmpty()) {
             unreadMessageCount = 0
             sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-            runOnUiThread { updateInboxBadge(unreadMessageCount) }  // Ensure the badge is updated
+            runOnUiThread { updateInboxBadge(unreadMessageCount) }
             return
         }
 
@@ -180,7 +263,7 @@ class DashboardActivity : AppCompatActivity() {
         if (pending == 0) {
             unreadMessageCount = 0
             sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-            runOnUiThread { updateInboxBadge(unreadMessageCount) }  // Ensure the badge is updated
+            runOnUiThread { updateInboxBadge(unreadMessageCount) }
             return
         }
 
@@ -201,15 +284,14 @@ class DashboardActivity : AppCompatActivity() {
                     if (--pending == 0) {
                         unreadMessageCount = total
                         sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-                        runOnUiThread { updateInboxBadge(unreadMessageCount) }  // Update badge on UI thread
+                        runOnUiThread { updateInboxBadge(unreadMessageCount) }
                     }
                 }
-
                 override fun onCancelled(error: DatabaseError) {
                     if (--pending == 0) {
                         unreadMessageCount = total
                         sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-                        runOnUiThread { updateInboxBadge(unreadMessageCount) }  // Update badge on UI thread
+                        runOnUiThread { updateInboxBadge(unreadMessageCount) }
                     }
                 }
             })
@@ -220,9 +302,8 @@ class DashboardActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("user_preferences", MODE_PRIVATE)
         if (!prefs.getBoolean("notifications_enabled", true)) return
 
-        val myName = currentUserName?.trim().orEmpty()  // current logged-in user's name
-        val myContact = user?.contact?.trim().orEmpty()  // current logged-in user's contact
-
+        val myName = currentUserName?.trim().orEmpty()
+        val myContact = user?.contact?.trim().orEmpty()
         if (myName.isEmpty() && myContact.isEmpty()) return
 
         stationNodes.forEach { stationNode ->
@@ -287,54 +368,15 @@ class DashboardActivity : AppCompatActivity() {
         sharedPreferences.edit().putBoolean(key, true).apply()
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-    private fun triggerNotification(
-        fireStationName: String?,
-        message: String?,
-        messageId: String,
-        incidentId: String?,
-        reporterName: String?,
-        title: String,
-        stationNode: String
-    ) {
-        val notificationId = (stationNode + "::" + messageId).hashCode()
-        val reportNode = reportNodeFor(stationNode)
-
-        val resultIntent = Intent(this, FireReportResponseActivity::class.java).apply {
-            putExtra("INCIDENT_ID", incidentId)
-            putExtra("FIRE_STATION_NAME", fireStationName)
-            putExtra("NAME", reporterName)
-            putExtra("fromNotification", true)
-            putExtra("STATION_NODE", stationNode)
-            putExtra("REPORT_NODE", reportNode)
-        }
-
-        val pendingIntent = TaskStackBuilder.create(this).run {
-            addNextIntentWithParentStack(Intent(this@DashboardActivity, DashboardActivity::class.java))
-            addNextIntent(resultIntent)
-            getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        }
-
-        val notification = NotificationCompat.Builder(this, "default_channel")
-            .setSmallIcon(R.drawable.ic_logo)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .build()
-
-        NotificationManagerCompat.from(this).notify(notificationId, notification)
-    }
-
-
+    /* =========================================================
+     * Firebase: Status Changes
+     * ========================================================= */
     private fun listenForStatusChanges() {
         val myName = currentUserName?.trim().orEmpty()
         if (myName.isEmpty()) return
 
-        // Loop through each station node
         stationNodes.forEach { stationNode ->
-            val baseRef = database.child(stationNode).child("FireReports")  // The correct path where reports are stored
+            val baseRef = database.child(stationNode).child("FireReports")
 
             baseRef.addChildEventListener(object : ChildEventListener {
                 @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
@@ -343,7 +385,6 @@ class DashboardActivity : AppCompatActivity() {
                     val reporterName = snapshot.child("reporterName").getValue(String::class.java) ?: return
                     val status = snapshot.child("status").getValue(String::class.java)
 
-                    // Check if the logged-in user is the reporter and if the status is "Ongoing"
                     if (reporterName == myName && status == "Ongoing") {
                         triggerStatusChangeNotification(reportId, stationNode, reporterName, status)
                     }
@@ -355,7 +396,6 @@ class DashboardActivity : AppCompatActivity() {
                     val reporterName = snapshot.child("reporterName").getValue(String::class.java) ?: return
                     val status = snapshot.child("status").getValue(String::class.java)
 
-                    // Check if the logged-in user is the reporter and if the status is "Ongoing"
                     if (reporterName == myName && status == "Ongoing") {
                         triggerStatusChangeNotification(reportId, stationNode, reporterName, status)
                     }
@@ -368,54 +408,25 @@ class DashboardActivity : AppCompatActivity() {
         }
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-    private fun triggerStatusChangeNotification(
-        reportId: String,
-        stationNode: String,
-        reporterName: String,
-        status: String
-    ) {
-        // Create unique notification ID using the report ID and station node
-        val notificationId = (stationNode + "::" + reportId).hashCode()
-
-        // Prepare the intent for the notification click
-        val resultIntent = Intent(this, FireReportResponseActivity::class.java).apply {
-            putExtra("REPORT_ID", reportId)
-            putExtra("STATUS", status)
-            putExtra("REPORTER_NAME", reporterName)
-            putExtra("STATION_NODE", stationNode)
-        }
-
-        // Create a pending intent for opening the activity
-        val pendingIntent = TaskStackBuilder.create(this).run {
-            addNextIntentWithParentStack(Intent(this@DashboardActivity, DashboardActivity::class.java))
-            addNextIntent(resultIntent)
-            getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        }
-
-        // Create and trigger the notification
-        val notification = NotificationCompat.Builder(this, "default_channel")
-            .setSmallIcon(R.drawable.ic_logo) // Replace with your app icon
-            .setContentTitle("Status Update: $status")
-            .setContentText("The status of your report has changed to $status.")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .build()
-
-        // Notify using NotificationManagerCompat
-        NotificationManagerCompat.from(this).notify(notificationId, notification)
-    }
-
-
-
-
+    /* =========================================================
+     * Utilities
+     * ========================================================= */
     private fun reportNodeFor(stationNode: String): String {
         return when (stationNode) {
             "LaFilipinaFireStation" -> "LaFilipinaFireReport"
             "CanocotanFireStation" -> "CanocotanFireReport"
             "MabiniFireStation" -> "MabiniFireReport"
             else -> "MabiniFireReport"
+        }
+    }
+
+    private fun updateInboxBadge(count: Int) {
+        val activity = this
+        if (activity is DashboardActivity) {
+            val badge = activity.binding.bottomNavigation.getOrCreateBadge(R.id.inboxFragment)
+            badge.isVisible = count > 0
+            badge.number = count
+            badge.maxCharacterCount = 3
         }
     }
 }

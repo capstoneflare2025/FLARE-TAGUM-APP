@@ -2,7 +2,7 @@
     <string name="app_name">FLARE-CAPSTONE</string>
     <string name="underline_text"><u>Click Here SMS Report!</u></string>
     <!-- res/values/strings.xml -->
-    <string name="google_routes_key">AIzaSyCNyhUph8_RefB5yw_lr43J_7AMkeYICfU</string>
+    <string name="google_maps_key">AIzaSyDdJ1N_5HKH_JHndZvmM7jb4H4VLb2iq1Q</string>
 
     <!-- res/values/strings.xml -->
     <string name="content_desc_profile_photo">Profile photo</string>
@@ -33,6 +33,23 @@
     <string name="content_desc_sort">Sort reports</string>
     <string name="content_desc_reports_list">List of reports</string>
     <string name="content_desc_empty">Empty state</string>
+
+    <string name="content_desc_my_location">Center map on my location</string>
+
+    <string name="onb_title">Welcome to Flare</string>
+    <string name="onb_subtitle">Easily report fires and emergencies. Stay informed with real-time updates.</string>
+    <string name="onb_chip_nearby">Nearby stations</string>
+    <string name="onb_chip_realtime">Real-time alerts</string>
+    <string name="onb_chip_fast">Fast reporting</string>
+    <string name="onb_cta">Get started</string>
+    <string name="onb_skip">Skip</string>
+    <string name="content_desc_firefighter">Illustration of a firefighter</string>
+
+    <string name="content_desc_info">Info</string>
+    <string name="login">Login</string>
+    <string name="register">Register</string>
+    <string name="station_contact">Station contact</string>
+    <string name="main_tagline">Report fires and emergencies quickly.</string>
 
 
 

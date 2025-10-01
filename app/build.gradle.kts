@@ -102,6 +102,10 @@ dependencies {
     implementation("androidx.preference:preference-ktx:1.2.1")
     implementation("com.google.firebase:firebase-database:22.0.0")
 
+    implementation("com.github.bumptech.glide:glide:4.16.0")
+    kapt("com.github.bumptech.glide:compiler:4.16.0")
+
+
 }
 
 apply(plugin = "com.google.gms.google-services")

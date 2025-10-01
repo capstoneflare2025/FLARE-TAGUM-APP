@@ -2,15 +2,22 @@ package com.example.flare_capstone
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Bundle
 import android.provider.MediaStore
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Base64
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
+import android.media.MediaRecorder
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -20,6 +27,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.example.flare_capstone.databinding.ActivityFireReportResponseBinding
 import com.google.firebase.database.*
 import java.io.ByteArrayOutputStream
@@ -38,6 +47,27 @@ class FireReportResponseActivity : AppCompatActivity() {
     private var fromNotification: Boolean = false
 
     private var base64Image: String = ""
+    private var recorder: MediaRecorder? = null
+    private var recordFile: File? = null
+    private var isRecording = false
+    private val RECORD_AUDIO_PERMISSION_CODE = 103
+    private var isPaused = false
+    private var pauseStartMs = 0L
+
+
+    private var recordStartMs = 0L
+    private val timerHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val timerRunnable = object : Runnable {
+        override fun run() {
+            val elapsed = System.currentTimeMillis() - recordStartMs
+            val sec = (elapsed / 1000).toInt()
+            val mm = sec / 60
+            val ss = sec % 60
+            binding.recordTimer.text = String.format("%02d:%02d", mm, ss)
+            timerHandler.postDelayed(this, 500)
+        }
+    }
+
 
     companion object {
         const val CAMERA_REQUEST_CODE = 100
@@ -135,10 +165,89 @@ class FireReportResponseActivity : AppCompatActivity() {
             }
         }
 
+        binding.chatInputArea.layoutTransition?.enableTransitionType(android.animation.LayoutTransition.CHANGING)
+// 1) When the field gains focus, treat it like “typing mode”
+        binding.messageInput.setOnFocusChangeListener { _, hasFocus ->
+            setTypingUi(hasFocus || (binding.messageInput.text?.isNotBlank() == true))
+        }
+
+// 2) When text changes, toggle typing mode based on emptiness
+        binding.messageInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val hasText = !s.isNullOrBlank()
+                setTypingUi(hasText || binding.messageInput.hasFocus())
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+// 3) (Nice-to-have) Also react when the keyboard opens/closes
+        ViewCompat.setOnApplyWindowInsetsListener(binding.chatInputArea) { v, insets ->
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            setTypingUi(imeVisible || binding.messageInput.text?.isNotBlank() == true)
+            insets
+        }
+
+        // expand when focused or has text
+        binding.messageInput.setOnFocusChangeListener { _, hasFocus ->
+            setExpandedUi(hasFocus || (binding.messageInput.text?.isNotBlank() == true))
+        }
+
+        binding.messageInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val expanded = !s.isNullOrBlank() || binding.messageInput.hasFocus()
+                setExpandedUi(expanded)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+// arrow tap → collapse to normal (keep text)
+        binding.arrowBackIcon.setOnClickListener {
+            binding.messageInput.clearFocus()
+            binding.chatInputArea.hideKeyboard()
+            setExpandedUi(false)
+            // (optional) also clear text:
+            // binding.messageInput.text?.clear()
+        }
+
+// optional: react to keyboard open/close for smoother UX
+        ViewCompat.setOnApplyWindowInsetsListener(binding.chatInputArea) { _, insets ->
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            setExpandedUi(imeVisible || binding.messageInput.text?.isNotBlank() == true)
+            insets
+        }
+
+
+
         binding.galleryIcon.setOnClickListener {
             val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
             startActivityForResult(intent, GALLERY_REQUEST_CODE)
         }
+
+        // when startRecording():
+        binding.voiceRecordIcon.setImageResource(R.drawable.ic_recording) // add a red mic asset
+
+// in stopRecordingAndPromptSend() finally:
+        binding.voiceRecordIcon.setImageResource(R.drawable.ic_record)   // back to idle mic
+
+        binding.voiceRecordIcon.setOnClickListener {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                startRecordingMessengerStyle()
+            } else {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.RECORD_AUDIO),
+                    RECORD_AUDIO_PERMISSION_CODE
+                )
+            }
+        }
+
+        binding.recordPause.setOnClickListener { togglePauseResume() }
+        binding.recordCancel.setOnClickListener { cancelRecording() }
+        binding.recordSend.setOnClickListener { finishRecordingAndSend() }
+
 
         binding.sendButton.setOnClickListener {
             val userMessage = binding.messageInput.text.toString().trim()
@@ -162,6 +271,188 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
     }
 
+    private fun showRecordBar(show: Boolean) {
+        binding.recordBar.visibility = if (show) View.VISIBLE else View.GONE
+
+        val dim = if (show) 0.3f else 1f
+        binding.messageInput.isEnabled = !show
+        binding.cameraIcon.isEnabled = !show
+        binding.galleryIcon.isEnabled = !show
+        binding.sendButton.isEnabled = !show
+
+        binding.messageInput.alpha = dim
+        binding.cameraIcon.alpha = dim
+        binding.galleryIcon.alpha = dim
+        binding.sendButton.alpha = if (show) 0.4f else 1f
+
+        binding.voiceRecordIcon.setImageResource(
+            if (show) R.drawable.ic_recording else R.drawable.ic_record
+        )
+
+        if (show) {
+            binding.recordPause.setImageResource(
+                if (isPaused) R.drawable.ic_resume else R.drawable.ic_pause
+            )
+        }
+    }
+
+
+    private fun startRecordingMessengerStyle() {
+        try {
+            recordFile = File.createTempFile("voice_", ".m4a", cacheDir)
+            recorder = MediaRecorder().apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setAudioEncodingBitRate(128_000)
+                setAudioSamplingRate(44_100)
+                setOutputFile(recordFile!!.absolutePath)
+                prepare()
+                start()
+            }
+            isRecording = true
+            isPaused = false                // NEW
+            pauseStartMs = 0L               // NEW
+            recordStartMs = System.currentTimeMillis()
+            binding.recordTimer.text = "00:00"
+            binding.recordPause.setImageResource(R.drawable.ic_pause)  // NEW
+            timerHandler.post(timerRunnable)
+            showRecordBar(true)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Failed to start recording", Toast.LENGTH_SHORT).show()
+            cleanupRecorder()
+            showRecordBar(false)
+        }
+    }
+
+    private fun togglePauseResume() {
+        if (!isRecording) return
+
+        if (android.os.Build.VERSION.SDK_INT < 24) {
+            Toast.makeText(this, "Pause requires Android 7.0+", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            if (!isPaused) {
+                recorder?.pause()
+                isPaused = true
+                pauseStartMs = System.currentTimeMillis()
+                timerHandler.removeCallbacks(timerRunnable)
+                binding.recordPause.setImageResource(R.drawable.ic_resume)
+            } else {
+                recorder?.resume()
+                isPaused = false
+                val pausedDuration = System.currentTimeMillis() - pauseStartMs
+                recordStartMs += pausedDuration      // keep timer accurate
+                pauseStartMs = 0L
+                binding.recordPause.setImageResource(R.drawable.ic_pause)
+                timerHandler.post(timerRunnable)
+            }
+        } catch (_: Exception) {
+            Toast.makeText(this, "Could not toggle pause", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+    private fun cancelRecording() {
+        try { recorder?.stop() } catch (_: Exception) {}
+        cleanupRecorder()
+        recordFile?.delete()
+        recordFile = null
+        isRecording = false
+        isPaused = false            // NEW
+        pauseStartMs = 0L           // NEW
+        timerHandler.removeCallbacks(timerRunnable)
+        showRecordBar(false)
+        Toast.makeText(this, "Recording discarded", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun finishRecordingAndSend() {
+        val file = recordFile
+        try { recorder?.stop() } catch (_: Exception) {}
+        cleanupRecorder()
+        isRecording = false
+        isPaused = false            // NEW
+        pauseStartMs = 0L           // NEW
+        timerHandler.removeCallbacks(timerRunnable)
+        showRecordBar(false)
+
+        if (file == null || !file.exists()) {
+            Toast.makeText(this, "No recording captured", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val bytes = file.readBytes()
+            val audioB64 = Base64.encodeToString(bytes, Base64.DEFAULT)
+            pushChatMessage(type = "reply", text = "", imageBase64 = "", audioBase64 = audioB64)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Failed to send recording", Toast.LENGTH_SHORT).show()
+        } finally {
+            file.delete()
+        }
+    }
+
+
+    private fun cleanupRecorder() {
+        try { recorder?.release() } catch (_: Exception) {}
+        recorder = null
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == RECORD_AUDIO_PERMISSION_CODE) {
+            val granted = grantResults.isNotEmpty() &&
+                    grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (granted) startRecordingMessengerStyle()
+            else Toast.makeText(this, "Microphone permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+    private fun View.hideKeyboard() {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(windowToken, 0)
+    }
+
+    private fun setExpandedUi(expanded: Boolean) {
+        // camera & gallery hidden while expanded
+        binding.cameraIcon.visibility = if (expanded) View.GONE else View.VISIBLE
+        binding.galleryIcon.visibility = if (expanded) View.GONE else View.VISIBLE
+
+        // arrow only when expanded (and placed BEFORE the EditText)
+        binding.arrowBackIcon.visibility = if (expanded) View.VISIBLE else View.GONE
+
+        // send button state
+        val hasText = binding.messageInput.text?.isNotBlank() == true
+        binding.sendButton.isEnabled = hasText
+        binding.sendButton.alpha = if (hasText) 1f else 0.4f
+
+        // give EditText more room while expanded
+        binding.messageInput.maxLines = if (expanded) 5 else 3
+    }
+
+    private fun setTypingUi(isTyping: Boolean) {
+        // Hide or show the left-side icons
+        binding.cameraIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
+        binding.galleryIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
+
+        // Optionally show/hide (or dim) the send button
+        val hasText = binding.messageInput.text?.isNotBlank() == true
+        binding.sendButton.isEnabled = hasText
+        binding.sendButton.alpha = if (hasText) 1f else 0.4f
+
+        // Let the EditText breathe a little more when typing
+        if (isTyping) {
+            binding.messageInput.maxLines = 5
+        } else {
+            binding.messageInput.maxLines = 3
+        }
+    }
+
+
     private fun messagesPath(): DatabaseReference =
         database.child(stationNode).child(reportNode).child(incidentId).child("messages")
 
@@ -184,6 +475,8 @@ class FireReportResponseActivity : AppCompatActivity() {
             override fun onCancelled(error: DatabaseError) {}
         })
     }
+
+
 
     private fun attachMessagesListener() {
         messagesListener = object : ValueEventListener {
@@ -430,7 +723,7 @@ class FireReportResponseActivity : AppCompatActivity() {
                         setOnClickListener {
                             try {
                                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
-                                val tempFile = File.createTempFile("audio_", ".3gp", cacheDir)
+                                val tempFile = File.createTempFile("audio_", ".m4a", cacheDir)
                                 tempFile.writeBytes(audioBytes)
                                 val mediaPlayer = android.media.MediaPlayer().apply {
                                     setDataSource(tempFile.absolutePath)
@@ -543,6 +836,39 @@ class FireReportResponseActivity : AppCompatActivity() {
                 Toast.makeText(this, if (task.isSuccessful) "Message deleted" else "Failed to delete message", Toast.LENGTH_SHORT).show()
             }
     }
+
+
+    // change signature: add audioBase64 with default = ""
+    private fun pushChatMessage(type: String, text: String, imageBase64: String, audioBase64: String = "") {
+        val now = System.currentTimeMillis()
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(now))
+        val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(now))
+
+        val msg = ChatMessage(
+            type = type,
+            text = text,
+            imageBase64 = imageBase64.ifEmpty { null },
+            audioBase64 = audioBase64.ifEmpty { null },   // <-- store audio here
+            uid = uid,
+            reporterName = intent.getStringExtra("NAME") ?: "",
+            date = date,
+            time = time,
+            timestamp = now,
+            isRead = false
+        )
+
+        messagesPath().push().setValue(msg).addOnCompleteListener { t ->
+            if (t.isSuccessful) {
+                mirrorReplyUnderStationNode(msg)
+                Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
+                base64Image = ""
+                binding.messageInput.text.clear()
+            } else {
+                Toast.makeText(this, "Error sending message.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
 
     override fun onDestroy() {
         super.onDestroy()

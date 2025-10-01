@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_home"
+            android:title="Home"
+            android:icon="@drawable/ic_home_24"
+            app:showAsAction="never"/>
+
+        <item
+            android:id="@+id/nav_report_fire"
+            android:title="Report Fire"
+            android:icon="@drawable/ic_fire_24"
+            app:showAsAction="never"/>
+
+        <item
+            android:id="@+id/nav_my_reports"
+            android:title="My Reports"
+            android:icon="@drawable/ic_inbox_24"
+            app:showAsAction="never"/>
+
+        <item
+            android:id="@+id/nav_settings"
+            android:title="Settings"
+            android:icon="@drawable/ic_settings_24"
+            app:showAsAction="never"/>
+
+        <item
+            android:id="@+id/nav_about"
+            android:title="About"
+            android:icon="@drawable/ic_info_24"
+            app:showAsAction="never"/>
+    </group>
+
+    <item
+        android:id="@+id/nav_logout"
+        android:title="Logout"
+        android:icon="@drawable/ic_logout_24"
+        app:showAsAction="never"/>
+</menu>

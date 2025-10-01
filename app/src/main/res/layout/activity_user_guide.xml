@@ -96,7 +96,7 @@
                             android:layout_width="28dp"
                             android:layout_height="28dp"
                             android:layout_marginEnd="12dp"
-                            android:src="@drawable/your_location"
+                            android:src="@drawable/ic_user_location"
                             android:contentDescription="@string/content_desc_icon_current_loc"/>
                         <TextView
                             android:layout_width="wrap_content"
@@ -117,12 +117,12 @@
                             android:layout_width="28dp"
                             android:layout_height="28dp"
                             android:layout_marginEnd="12dp"
-                            android:src="@drawable/near_location"
+                            android:src="@drawable/ic_station_shortest"
                             android:contentDescription="@string/content_desc_icon_near_station"/>
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Yellow Pin — Near Fire Station"
+                            android:text="Brown Fire Station — Near Fire Station"
                             android:textSize="14sp"
                             android:textColor="?attr/colorOnSurface"/>
                     </LinearLayout>
@@ -138,12 +138,12 @@
                             android:layout_width="28dp"
                             android:layout_height="28dp"
                             android:layout_marginEnd="12dp"
-                            android:src="@drawable/far_location"
+                            android:src="@drawable/ic_station_longest"
                             android:contentDescription="@string/content_desc_icon_far_station"/>
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Brown Pin — Far Fire Station"
+                            android:text="Red Fire Station — Far Fire Station"
                             android:textSize="14sp"
                             android:textColor="?attr/colorOnSurface"/>
                     </LinearLayout>

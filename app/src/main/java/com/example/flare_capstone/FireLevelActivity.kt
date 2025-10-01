@@ -36,29 +36,34 @@ import java.util.Locale
 
 class FireLevelActivity : AppCompatActivity() {
 
+    /* ---------------- View / Firebase / Location ---------------- */
     private lateinit var binding: ActivityFireLevelBinding
     private lateinit var auth: FirebaseAuth
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
+    /* ---------------- Location State ---------------- */
     private var latitude: Double = 0.0
     private var longitude: Double = 0.0
 
+    /* ---------------- Request Codes ---------------- */
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
     private val SMS_PERMISSION_REQUEST_CODE = 101
 
+    /* ---------------- Address / Report Control ---------------- */
     private var readableAddress: String? = null
     private var addressHandled = false
     private var lastReportTime: Long = 0
 
+    /* ---------------- Connectivity ---------------- */
     private lateinit var connectivityManager: ConnectivityManager
     private var loadingDialog: AlertDialog? = null
 
-    // ==== Tagum radius fallback (center ~City Hall; generous radius buffer) ====
+    /* ---------------- Tagum Radius Fallback ---------------- */
     private val TAGUM_CENTER_LAT = 7.447725
     private val TAGUM_CENTER_LON = 125.804150
     private val TAGUM_RADIUS_METERS = 11_000f // ~11 km buffer around center
 
-    // Station profile/report mapping
+    /* ---------------- Station Mappings ---------------- */
     private val profileKeyByStation = mapOf(
         "LaFilipinaFireStation" to "LaFilipinaProfile",
         "CanocotanFireStation"  to "CanocotanProfile",
@@ -79,11 +84,15 @@ class FireLevelActivity : AppCompatActivity() {
         val reportNode: String
     )
 
+    /* ---------------- Network Callback ---------------- */
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) { runOnUiThread { hideLoadingDialog() } }
         override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
     }
 
+    /* =========================================================
+     * Lifecycle
+     * ========================================================= */
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
@@ -94,20 +103,25 @@ class FireLevelActivity : AppCompatActivity() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         connectivityManager = getSystemService(ConnectivityManager::class.java)
 
+        // Initial connectivity & listener
         if (!isConnected()) showLoadingDialog("No internet connection") else hideLoadingDialog()
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
+        // Location + UI
         checkPermissionsAndGetLocation()
         populateSpinners()
 
+        // Buttons
         binding.cancelButton.setOnClickListener {
             startActivity(Intent(this, DashboardActivity::class.java))
             finish()
         }
         binding.sendButton.setOnClickListener { checkAndSendAlertReport() }
 
+        // FCM topic
         FirebaseMessaging.getInstance().subscribeToTopic("all")
 
+        // SMS Permission
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), SMS_PERMISSION_REQUEST_CODE)
         }
@@ -118,7 +132,9 @@ class FireLevelActivity : AppCompatActivity() {
         kotlin.runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
     }
 
-    // ---- Connectivity ----
+    /* =========================================================
+     * Connectivity
+     * ========================================================= */
     private fun isConnected(): Boolean {
         val activeNetwork = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
@@ -141,7 +157,9 @@ class FireLevelActivity : AppCompatActivity() {
         loadingDialog?.dismiss()
     }
 
-    // ---- Permissions & Location ----
+    /* =========================================================
+     * Permissions & Location
+     * ========================================================= */
     private fun checkPermissionsAndGetLocation() {
         val fineOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarseOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -165,7 +183,6 @@ class FireLevelActivity : AppCompatActivity() {
         hourAdapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
         binding.spinnerHour.adapter = hourAdapter
 
-        // Minutes should be 0..59 (fix)
         val minuteAdapter = ArrayAdapter(this, R.layout.simple_spinner_item, (0..59).toList())
         minuteAdapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
         binding.spinnerMinute.adapter = minuteAdapter
@@ -192,13 +209,14 @@ class FireLevelActivity : AppCompatActivity() {
                 longitude = it.longitude
                 fusedLocationClient.removeLocationUpdates(this)
                 hideLoadingDialog()
-                // Your existing reverse-geocode task:
                 FetchBarangayAddressTask(this@FireLevelActivity, latitude, longitude).execute()
             }
         }
     }
 
-    // ---- Helpers for Tagum checks ----
+    /* =========================================================
+     * Tagum Checks
+     * ========================================================= */
     private fun isWithinTagumByDistance(lat: Double, lon: Double): Boolean {
         val d = calculateDistance(lat, lon, TAGUM_CENTER_LAT, TAGUM_CENTER_LON)
         return d <= TAGUM_RADIUS_METERS
@@ -206,10 +224,12 @@ class FireLevelActivity : AppCompatActivity() {
 
     private fun looksLikeTagum(text: String?): Boolean {
         if (text.isNullOrBlank()) return false
-        return text.contains("tagum", ignoreCase = true) // matches "Tagum" or "Tagum City"
+        return text.contains("tagum", ignoreCase = true)
     }
 
-    // ---- Report flow ----
+    /* =========================================================
+     * Report Flow
+     * ========================================================= */
     private fun checkAndSendAlertReport() {
         val now = System.currentTimeMillis()
         if (now - lastReportTime >= 5 * 60 * 1000) {
@@ -399,6 +419,9 @@ class FireLevelActivity : AppCompatActivity() {
             }
     }
 
+    /* =========================================================
+     * SMS
+     * ========================================================= */
     private fun sendSMSToNearestStation(
         stationContact: String,
         alertLevel: String,
@@ -442,13 +465,16 @@ class FireLevelActivity : AppCompatActivity() {
         }
     }
 
+    /* =========================================================
+     * Utilities
+     * ========================================================= */
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
         val results = FloatArray(1)
         Location.distanceBetween(lat1, lon1, lat2, lon2, results)
         return results[0]
     }
 
-    // === UPDATED: accept Tagum if either address text says "Tagum" OR device is inside the Tagum radius ===
+    // Accept Tagum if either address text says "Tagum" OR device is inside the Tagum radius
     fun handleFetchedAddress(address: String?) {
         val cleaned = address?.trim().orEmpty()
         val textOk = looksLikeTagum(cleaned)
@@ -469,8 +495,6 @@ class FireLevelActivity : AppCompatActivity() {
         } else {
             binding.sendButton.isEnabled = false
             Toast.makeText(this, "Outside Tagum area. You can't submit a report.", Toast.LENGTH_SHORT).show()
-            // Leave addressHandled=false so we can retry on next entry
         }
     }
-
 }

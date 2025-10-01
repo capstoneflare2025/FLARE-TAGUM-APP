@@ -28,10 +28,12 @@ import java.io.ByteArrayOutputStream
 
 class EditProfileActivity : AppCompatActivity() {
 
+    /* ---------------- View / Firebase ---------------- */
     private lateinit var binding: ActivityEditProfileBinding
     private lateinit var database: DatabaseReference
     private lateinit var auth: FirebaseAuth
 
+    /* ---------------- Request Codes ---------------- */
     companion object {
         private const val CAMERA_REQUEST_CODE = 101
         private const val CAMERA_PERMISSION_REQUEST_CODE = 102
@@ -39,10 +41,12 @@ class EditProfileActivity : AppCompatActivity() {
         private const val GALLERY_PERMISSION_REQUEST_CODE = 103
     }
 
+    /* ---------------- Profile Image State ---------------- */
     private var base64ProfileImage: String? = null
     private var hasProfileImage: Boolean = false
     private var removeProfileImageRequested: Boolean = false
 
+    /* ---------------- Connectivity ---------------- */
     private lateinit var connectivityManager: ConnectivityManager
     private var loadingDialog: AlertDialog? = null
 
@@ -51,6 +55,9 @@ class EditProfileActivity : AppCompatActivity() {
         override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
     }
 
+    /* =========================================================
+     * Lifecycle
+     * ========================================================= */
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
@@ -61,19 +68,25 @@ class EditProfileActivity : AppCompatActivity() {
         database = FirebaseDatabase.getInstance().getReference("Users")
         connectivityManager = getSystemService(ConnectivityManager::class.java)
 
+        // Initial connectivity state
         if (!isConnected()) showLoadingDialog("No internet connection") else hideLoadingDialog()
 
+        // Navigation
         binding.back.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
+        // Profile image click
         binding.profileIcon.isClickable = true
         binding.profileIcon.setOnClickListener { showImageSourceSheet() }
 
+        // Email is readonly
         binding.email.isFocusable = false
         binding.email.isFocusableInTouchMode = false
         binding.email.isClickable = false
 
+        // Network callback
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
+        // Load user data
         val userId = auth.currentUser?.uid
         if (userId != null) {
             database.child(userId).get().addOnSuccessListener { snapshot ->
@@ -200,6 +213,14 @@ class EditProfileActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        try { connectivityManager.unregisterNetworkCallback(networkCallback) } catch (_: Exception) {}
+    }
+
+    /* =========================================================
+     * Connectivity
+     * ========================================================= */
     private fun isConnected(): Boolean {
         val activeNetwork = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
@@ -220,11 +241,9 @@ class EditProfileActivity : AppCompatActivity() {
 
     private fun hideLoadingDialog() { loadingDialog?.dismiss() }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        try { connectivityManager.unregisterNetworkCallback(networkCallback) } catch (_: Exception) {}
-    }
-
+    /* =========================================================
+     * Firebase: Update
+     * ========================================================= */
     private fun updateDatabase(
         userId: String,
         name: String,
@@ -261,6 +280,9 @@ class EditProfileActivity : AppCompatActivity() {
             }
     }
 
+    /* =========================================================
+     * Image Picker UI
+     * ========================================================= */
     private fun showImageSourceSheet() {
         val options = if (hasProfileImage)
             arrayOf("Take photo", "Choose from gallery", "Remove photo")
@@ -273,7 +295,6 @@ class EditProfileActivity : AppCompatActivity() {
                     "Take photo" -> ensureCameraAndOpen()
                     "Choose from gallery" -> ensureGalleryAndOpen()
                     "Remove photo" -> {
-                        // Immediate UI revert to placeholder; mark for deletion on Save
                         binding.profileIcon.setImageResource(R.drawable.ic_camera_profile)
                         base64ProfileImage = null
                         hasProfileImage = false
@@ -284,6 +305,9 @@ class EditProfileActivity : AppCompatActivity() {
             }.show()
     }
 
+    /* =========================================================
+     * Permissions / Launchers
+     * ========================================================= */
     private fun ensureCameraAndOpen() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST_CODE)
@@ -325,6 +349,9 @@ class EditProfileActivity : AppCompatActivity() {
         }
     }
 
+    /* =========================================================
+     * Activity Result (deprecated API retained)
+     * ========================================================= */
     @Deprecated("Using startActivityForResult; migrate to Activity Result APIs when convenient")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -351,6 +378,9 @@ class EditProfileActivity : AppCompatActivity() {
         }
     }
 
+    /* =========================================================
+     * Bitmap <-> Base64
+     * ========================================================= */
     private fun convertBitmapToBase64(bitmap: Bitmap): String {
         val outputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)

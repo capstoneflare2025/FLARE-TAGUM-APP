@@ -8,78 +8,49 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.flare_capstone.databinding.ActivityAboutAppBinding
-import kotlin.jvm.java
 
-class AboutAppActivity: AppCompatActivity() {
+class AboutAppActivity : AppCompatActivity() {
 
+    /* ---------------- View Binding ---------------- */
     private lateinit var binding: ActivityAboutAppBinding
 
+    /* ---------------- Network ---------------- */
     private lateinit var connectivityManager: ConnectivityManager
-
     private var loadingDialog: AlertDialog? = null
 
+    // Network callback to monitor internet availability
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            runOnUiThread {
-                hideLoadingDialog()
-            }
+            runOnUiThread { hideLoadingDialog() }
         }
 
         override fun onLost(network: Network) {
-            runOnUiThread {
-                showLoadingDialog("No internet connection")
-            }
+            runOnUiThread { showLoadingDialog("No internet connection") }
         }
     }
 
+    /* =========================================================
+     * Lifecycle
+     * ========================================================= */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         binding = ActivityAboutAppBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Init connectivity manager
         connectivityManager = getSystemService(ConnectivityManager::class.java)
 
-        // Check initial connection
+        // Initial connection check
         if (!isConnected()) {
             showLoadingDialog("No internet connection")
-        } else {
-            hideLoadingDialog()
         }
 
-        // Register network callback
+        // Register network listener
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
-
-        binding.back.setOnClickListener {
-            onBackPressed()
-        }
-
-
-    }
-
-    private fun isConnected(): Boolean {
-        val activeNetwork = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
-
-    private fun showLoadingDialog(message: String = "Please wait if internet is slow") {
-        if (loadingDialog == null) {
-            val builder = AlertDialog.Builder(this)
-            val inflater = layoutInflater
-            val dialogView = inflater.inflate(com.example.flare_capstone.R.layout.custom_loading_dialog, null)
-            builder.setView(dialogView)
-            builder.setCancelable(false)
-            loadingDialog = builder.create()
-        }
-        loadingDialog?.show()
-        loadingDialog?.findViewById<TextView>(com.example.flare_capstone.R.id.loading_message)?.text = message
-    }
-
-
-    private fun hideLoadingDialog() {
-        loadingDialog?.dismiss()
+        // Back button
+        binding.back.setOnClickListener { onBackPressed() }
     }
 
     override fun onDestroy() {
@@ -87,5 +58,31 @@ class AboutAppActivity: AppCompatActivity() {
         connectivityManager.unregisterNetworkCallback(networkCallback)
     }
 
+    /* =========================================================
+     * Network Helpers
+     * ========================================================= */
+    private fun isConnected(): Boolean {
+        val activeNetwork = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
 
+    /* =========================================================
+     * Loading Dialog Helpers
+     * ========================================================= */
+    private fun showLoadingDialog(message: String = "Please wait, checking internet...") {
+        if (loadingDialog == null) {
+            val builder = AlertDialog.Builder(this)
+            val dialogView = layoutInflater.inflate(R.layout.custom_loading_dialog, null)
+            builder.setView(dialogView)
+            builder.setCancelable(false)
+            loadingDialog = builder.create()
+        }
+        loadingDialog?.show()
+        loadingDialog?.findViewById<TextView>(R.id.loading_message)?.text = message
+    }
+
+    private fun hideLoadingDialog() {
+        loadingDialog?.dismiss()
+    }
 }

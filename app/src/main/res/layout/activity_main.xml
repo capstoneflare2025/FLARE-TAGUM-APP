@@ -1,106 +1,158 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="20dp"
+    android:background="@drawable/bg_onboarding_gradient"
     tools:context=".MainActivity">
 
-    <!-- Info Icon -->
+    <!-- Info icon (opens onboarding/tips) -->
     <ImageView
         android:id="@+id/onboard"
-        android:layout_width="30dp"
-        android:layout_height="30dp"
-        android:src="@drawable/info"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:contentDescription="@string/content_desc_info"
+        android:src="@drawable/ic_info_24"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        app:tint="?attr/colorError"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="20dp" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Logo -->
+    <!-- App logo -->
     <ImageView
         android:id="@+id/logo"
-        android:layout_width="150dp"
-        android:layout_height="150dp"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
         android:src="@drawable/ic_logo"
-        android:contentDescription="Logo"
+        android:contentDescription="@string/app_name"
         app:layout_constraintTop_toBottomOf="@id/onboard"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="40dp" />
+        android:layout_marginTop="36dp" />
 
     <!-- Title -->
     <TextView
         android:id="@+id/titleText"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text="FLARE"
-        android:textSize="40sp"
         android:textStyle="bold"
-        android:textColor="?android:textColorPrimary"
+        android:gravity="center"
+        android:textSize="36sp"
+        android:includeFontPadding="false"
+        android:textColor="?attr/colorOnBackground"
+        android:letterSpacing="0.02"
         app:layout_constraintTop_toBottomOf="@id/logo"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="12dp" />
 
-    <!-- LOGIN Button -->
-    <Button
-        android:id="@+id/loginButton"
-        android:layout_width="250dp"
-        android:layout_height="68dp"
-        android:text="LOGIN"
-        android:textColor="@android:color/white"
-        android:backgroundTint="#E00024"
+    <!-- Optional short tagline (safe to remove if not needed) -->
+    <TextView
+        android:id="@+id/tagline"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="@string/main_tagline"
+        android:textSize="14sp"
+        android:alpha="0.85"
+        android:gravity="center"
+        android:textColor="?attr/colorOnBackground"
         app:layout_constraintTop_toBottomOf="@id/titleText"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="70dp"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp" />
+        android:layout_marginTop="4dp" />
 
-    <!-- REGISTER Button -->
-    <Button
+    <!-- LOGIN -->
+
+    <!-- REGISTER -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/loginButton"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="40dp"
+        android:layout_marginEnd="20dp"
+        android:backgroundTint="#E00024"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:text="@string/login"
+        android:textAllCaps="false"
+        android:textSize="18sp"
+        app:cornerRadius="28dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tagline" />
+
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/registerButton"
-        android:layout_width="250dp"
-        android:layout_height="68dp"
-        android:text="REGISTER"
-        android:textColor="@android:color/white"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:text="@string/register"
+        android:textAllCaps="false"
+        android:textSize="18sp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        app:cornerRadius="28dp"
         android:backgroundTint="#E87F2E"
         app:layout_constraintTop_toBottomOf="@id/loginButton"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="20dp"
         android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp" />
+        android:layout_marginEnd="20dp"
+        android:layout_marginTop="16dp" />
 
-    <!-- SMS Report -->
+    <!-- SMS Report CTA (underlined from strings) -->
     <TextView
         android:id="@+id/smsReport"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/underline_text"
-        android:textSize="20sp"
+        android:textSize="16sp"
         android:textStyle="bold"
-        android:textColor="?android:textColorPrimary"
+        android:textColor="?attr/colorOnBackground"
+        android:alpha="0.9"
+        android:padding="8dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="?attr/selectableItemBackgroundBorderless"
         app:layout_constraintTop_toBottomOf="@id/registerButton"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="20dp" />
+        android:layout_marginTop="18dp" />
 
-    <!-- Station Contact -->
+    <!-- Divider -->
+    <View
+        android:id="@+id/divider"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="?attr/colorOutline"
+        app:layout_constraintTop_toBottomOf="@id/smsReport"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp" />
+
+    <!-- Station Contact link -->
     <TextView
         android:id="@+id/stationContact"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Station Contact"
-        android:textSize="18sp"
-        android:textColor="#1976D2"
+        android:text="@string/station_contact"
+        android:textSize="16sp"
         android:textStyle="bold"
+        android:textColor="?attr/colorPrimary"
         android:clickable="true"
         android:focusable="true"
-        app:layout_constraintTop_toBottomOf="@id/smsReport"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="8dp"
+        app:layout_constraintTop_toBottomOf="@id/divider"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="100dp" />
+        android:layout_marginTop="8dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
