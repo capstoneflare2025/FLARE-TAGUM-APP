@@ -46,10 +46,22 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     // Google Maps
     private var gMap: GoogleMap? = null
 
-    // Pins + route
+    // Pins
     private var myMarker: Marker? = null
     private var incidentMarker: Marker? = null
-    private var routeLine: Polyline? = null
+
+    // Route polylines
+    private data class OsrmRoute(
+        val points: List<LatLng>,
+        val durationSec: Long,
+        val distanceMeters: Long
+    )
+    private data class DrawnRoute(
+        val polyline: Polyline,
+        val route: OsrmRoute,
+        var isPrimary: Boolean
+    )
+    private val drawnRoutes = mutableListOf<DrawnRoute>()
 
     // Station + DB paths
     private var stationPrefix: String? = null
@@ -187,6 +199,17 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         gMap?.moveCamera(CameraUpdateFactory.zoomTo(15f))
         enableMyLocationUiIfPermitted()
 
+        // Let users tap any polyline to highlight/select that route
+        gMap?.setOnPolylineClickListener { tapped ->
+            val dr = drawnRoutes.find { it.polyline == tapped } ?: return@setOnPolylineClickListener
+            highlightRoute(dr)
+            val mins = max(1, (dr.route.durationSec / 60).toInt())
+            val km = (dr.route.distanceMeters / 100.0).roundToInt() / 10.0
+            incidentMarker?.snippet = "${mins}m • ${km}km"
+            incidentMarker?.showInfoWindow()
+            Toast.makeText(requireContext(), if (dr.isPrimary) "Shortest route" else "Alternative route", Toast.LENGTH_SHORT).show()
+        }
+
         updatePins(lastMyPoint, currentReportPoint)
     }
 
@@ -249,7 +272,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         val origin = lastMyPoint
         val dest = currentReportPoint
         if (origin != null && dest != null && shouldRecomputeRoutes(origin, dest)) {
-            fetchAndDrawOsrmRoute(origin, dest)
+            fetchAndDrawOsrmRoutes(origin, dest)
         }
     }
 
@@ -384,7 +407,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             ongoingIncidentId = null
             ongoingIncidentSource = null
             currentReportPoint = null
-            routeLine?.remove(); routeLine = null
+            clearAllRoutes()
             incidentMarker?.let { it.remove(); incidentMarker = null }
             updatePins(lastMyPoint, null)
             Log.d(TAG, "No ongoing reports; total=$total ongoingCount=$ongoingCount")
@@ -418,12 +441,12 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             .getReference("$path/$id")
             .child("status")
             .setValue("Completed")
-        routeLine?.remove(); routeLine = null
+        clearAllRoutes()
         incidentMarker?.let { it.remove(); incidentMarker = null }
         Log.d(TAG, "Marked completed $id at $src")
     }
 
-    // ---------- OSRM routing (free) ----------
+    // ---------- OSRM routing (show multiple alternatives) ----------
 
     private fun shouldRecomputeRoutes(origin: LatLng, dest: LatLng): Boolean {
         val prevO = lastRoutedOrigin
@@ -442,42 +465,53 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         } else false
     }
 
-    private data class OsrmRoute(
-        val points: List<LatLng>,
-        val durationSec: Long,
-        val distanceMeters: Long
-    )
-
-    private fun fetchAndDrawOsrmRoute(origin: LatLng, dest: LatLng) {
+    private fun fetchAndDrawOsrmRoutes(origin: LatLng, dest: LatLng) {
         bg.execute {
-            val res = fetchOsrmRoute(origin, dest)
+            val all = fetchOsrmRoutes(origin, dest)
             requireActivity().runOnUiThread {
                 val map = gMap ?: return@runOnUiThread
-                if (res == null || res.points.isEmpty()) {
-                    routeLine?.remove(); routeLine = null
+                clearAllRoutes()
+
+                if (all.isEmpty()) {
                     Toast.makeText(requireContext(), "No route found", Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
 
-                routeLine?.remove()
-                routeLine = map.addPolyline(
-                    PolylineOptions()
-                        .addAll(res.points)
-                        .color(0xFF2962FF.toInt()) // blue
-                        .width(12f)
-                )
+                // Sort by distance ascending (use durationSec for fastest)
+                val sorted = all.sortedBy { it.distanceMeters }
 
-                val mins = max(1, (res.durationSec / 60).toInt())
-                val km = (res.distanceMeters / 100.0).roundToInt() / 10.0
-                incidentMarker?.snippet = "${mins}m • ${km}km"
-                incidentMarker?.showInfoWindow()
+                // Draw the shortest first as primary, others as alternatives
+                sorted.forEachIndexed { index, r ->
+                    val isPrimary = index == 0
+                    val polyOpts = PolylineOptions()
+                        .addAll(r.points)
+                        .width(if (isPrimary) 12f else 8f)
+                        .color(if (isPrimary) 0xFF2962FF.toInt() else 0x802962FF.toInt())
+                        .zIndex(if (isPrimary) 2f else 1f)
+                        .clickable(true)
 
-                Log.d(TAG, "OSRM route drawn: ${mins}m, ${km}km, pts=${res.points.size}")
+                    if (!isPrimary) {
+                        polyOpts.pattern(listOf(Dot(), Gap(14f))) // dashed for alts
+                    }
+
+                    val pl = map.addPolyline(polyOpts)
+                    drawnRoutes += DrawnRoute(polyline = pl, route = r, isPrimary = isPrimary)
+                }
+
+                // Update marker info with primary route stats
+                val chosen = drawnRoutes.firstOrNull { it.isPrimary }?.route
+                if (chosen != null) {
+                    val mins = max(1, (chosen.durationSec / 60).toInt())
+                    val km = (chosen.distanceMeters / 100.0).roundToInt() / 10.0
+                    incidentMarker?.snippet = "${mins}m • ${km}km"
+                    incidentMarker?.showInfoWindow()
+                    Log.d(TAG, "OSRM routes=${sorted.size} primary mins=$mins km=$km")
+                }
             }
         }
     }
 
-    private fun fetchOsrmRoute(origin: LatLng, dest: LatLng): OsrmRoute? {
+    private fun fetchOsrmRoutes(origin: LatLng, dest: LatLng): List<OsrmRoute> {
         val servers = listOf(
             "https://router.project-osrm.org",
             "https://routing.openstreetmap.de/routed-car"
@@ -488,15 +522,16 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             for (extra in extras) {
                 val urlStr = "$base/route/v1/driving/" +
                         "${origin.longitude},${origin.latitude};${dest.longitude},${dest.latitude}" +
-                        "?overview=full&geometries=polyline&steps=false&alternatives=false&continue_straight=true$extra"
-                val res = runCatching { requestOsrm(urlStr) }.getOrNull()
-                if (res != null) return res
+                        "?overview=full&geometries=polyline&steps=false&alternatives=true&continue_straight=true$extra"
+
+                val res = runCatching { requestOsrmAll(urlStr) }.getOrNull()
+                if (!res.isNullOrEmpty()) return res
             }
         }
-        return null
+        return emptyList()
     }
 
-    private fun requestOsrm(urlStr: String): OsrmRoute? {
+    private fun requestOsrmAll(urlStr: String): List<OsrmRoute> {
         var conn: HttpURLConnection? = null
         return try {
             val url = URL(urlStr)
@@ -509,24 +544,62 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             val reader = (if (code in 200..299) conn.inputStream else conn.errorStream)
             val resp = BufferedReader(InputStreamReader(reader)).use { it.readText() }
             Log.d(TAG, "OSRM code=$code body=${resp.take(160)}")
-            if (code !in 200..299) return null
+            if (code !in 200..299) return emptyList()
 
             val root = JSONObject(resp)
-            if (root.optString("code") != "Ok") return null
+            if (root.optString("code") != "Ok") return emptyList()
             val arr = root.optJSONArray("routes") ?: JSONArray()
-            if (arr.length() == 0) return null
-            val r0 = arr.getJSONObject(0)
-            val poly = r0.optString("geometry")
-            val durSec = (r0.optDouble("duration", 0.0)).toLong()
-            val dist = (r0.optDouble("distance", 0.0)).toLong()
-            val pts = decodePolylineE5ToLatLng(poly)
-            if (pts.isEmpty()) null else OsrmRoute(pts, durSec, dist)
+            if (arr.length() == 0) return emptyList()
+
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val r = arr.getJSONObject(i)
+                    val poly = r.optString("geometry", "")
+                    val durSec = (r.optDouble("duration", 0.0)).toLong()
+                    val dist = (r.optDouble("distance", 0.0)).toLong()
+                    val pts = decodePolylineE5ToLatLng(poly)
+                    if (pts.isNotEmpty()) add(OsrmRoute(pts, durSec, dist))
+                }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "OSRM error: ${e.message}")
-            null
+            emptyList()
         } finally {
             try { conn?.disconnect() } catch (_: Exception) {}
         }
+    }
+
+    private fun highlightRoute(target: DrawnRoute) {
+        val map = gMap ?: return
+        // Demote any current primary
+        drawnRoutes.forEach {
+            if (it.isPrimary) {
+                it.isPrimary = false
+                it.polyline.width = 8f
+                it.polyline.color = 0x802962FF.toInt()
+                it.polyline.pattern = listOf(Dot(), Gap(14f))
+                it.polyline.zIndex = 1f
+            }
+        }
+        // Promote target as primary
+        target.isPrimary = true
+        target.polyline.width = 12f
+        target.polyline.color = 0xFF2962FF.toInt()
+        target.polyline.pattern = null
+        target.polyline.zIndex = 2f
+
+        // Optionally refit camera to the selected route bounds
+        try {
+            val b = LatLngBounds.builder().apply {
+                target.route.points.forEach { include(it) }
+            }.build()
+            map.animateCamera(CameraUpdateFactory.newLatLngBounds(b, 120))
+        } catch (_: Exception) {}
+    }
+
+    private fun clearAllRoutes() {
+        drawnRoutes.forEach { it.polyline.remove() }
+        drawnRoutes.clear()
     }
 
     // Polyline precision 5 (OSRM default) -> List<LatLng> for Google Maps

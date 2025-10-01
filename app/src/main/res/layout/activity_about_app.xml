@@ -1,143 +1,276 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+    android:padding="16dp">
 
-    <RelativeLayout
-        android:id="@+id/header"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
+    <!-- Top App Bar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:title="About App"
+        app:titleCentered="true"
         app:layout_constraintTop_toTopOf="parent"
-       >
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <ImageView
-            android:id="@+id/back"
-            android:layout_width="25dp"
-            android:layout_height="25dp"
-            android:layout_marginStart="15dp"
-            android:layout_marginTop="15dp"
+    <!-- Keep your existing back ID -->
+    <ImageView
+        android:id="@+id/back"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:src="@drawable/ic_back"
+        android:contentDescription="@string/content_desc_navigate_up"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="4dp"
+        app:layout_constraintStart_toStartOf="@id/topBar"
+        app:layout_constraintTop_toTopOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="@id/topBar" />
 
-            android:background="@drawable/ic_back" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:textColor="?android:textColorPrimary"
-            android:text="About App"
-            android:textSize="25sp"
-            android:textStyle="bold" />
-
-    </RelativeLayout>
-
-
-
-    <!-- App Description Card -->
+    <!-- App Description -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/descriptionCard"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        app:cardCornerRadius="8dp"
-        app:cardElevation="4dp"
-        app:cardBackgroundColor="@android:color/white"
-        app:layout_constraintTop_toBottomOf="@id/header"
+        app:cardCornerRadius="20dp"
+        app:strokeColor="?attr/colorOutline"
+        app:strokeWidth="1dp"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="20dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp">
-
-        <TextView
-            android:id="@+id/appDescription"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:padding="16dp"
-            android:text="This app helps users report fire incidents, track their status, and provide emergency responses."
-            android:textColor="#333333"
-            android:textSize="14sp" />
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- Features Section -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/featuresCard"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        app:cardCornerRadius="8dp"
-        app:cardElevation="4dp"
-        app:cardBackgroundColor="@android:color/white"
-        app:layout_constraintTop_toBottomOf="@id/descriptionCard"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp">
+        android:layout_marginTop="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="20dp">
+
+            <!-- Title with icon -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_info_24"
+                    android:layout_marginEnd="8dp"
+                    app:tint="?attr/colorError"  />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="App Description"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    />
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/appFeaturesTitle"
-                android:layout_width="wrap_content"
+                android:id="@+id/appDescription"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Features"
-                android:textSize="18sp"
-                android:textColor="#E00024"
-                android:gravity="center" />
+                android:layout_marginTop="8dp"
+                android:text="This app helps users report fire incidents, track their status, and request emergency responses, with real-time updates and live map tracking."
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Features -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/featuresCard"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="20dp"
+        app:strokeColor="?attr/colorOutline"
+        app:strokeWidth="1dp"
+        app:layout_constraintTop_toBottomOf="@id/descriptionCard"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_star_24"
+                    android:layout_marginEnd="8dp"
+                    app:tint="?attr/colorError"  />
+
+                <TextView
+                    android:id="@+id/appFeaturesTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Features"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/appFeatures"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="• Report fire incidents\n• Get fire status updates\n• Request emergency help\n• Track incidents on map"
+                android:layout_marginTop="8dp"
+                android:text="• Report fire incidents\n• Get real-time status updates\n• Request emergency help\n• Track incidents on a live map"
                 android:textSize="14sp"
-                android:textColor="#333333"
-                android:layout_marginTop="8dp" />
+                android:textColor="?attr/colorOnSurface"/>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Contact Info Section -->
+    <!-- Contact -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/contactCard"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        app:cardCornerRadius="8dp"
-        app:cardElevation="4dp"
-        app:cardBackgroundColor="@android:color/white"
+        app:cardCornerRadius="20dp"
+        app:strokeColor="?attr/colorOutline"
+        app:strokeWidth="1dp"
         app:layout_constraintTop_toBottomOf="@id/featuresCard"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp">
+        android:layout_marginTop="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="20dp">
 
-            <TextView
-                android:id="@+id/contactInfoTitle"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Contact Information"
-                android:textSize="18sp"
-                android:textColor="#E00024"
-                android:gravity="center" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_email_24"
+                    android:layout_marginEnd="8dp"
+                    app:tint="?attr/colorError" />
+
+                <TextView
+                    android:id="@+id/contactInfoTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Contact Information"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/contactInfo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:text="Email: fireStation@gmail.com\nPhone: 0975 064 7852"
                 android:textSize="14sp"
-                android:textColor="#333333"
-                android:layout_marginTop="8dp" />
+                android:textColor="?attr/colorOnSurface"
+                android:autoLink="email|phone"
+                android:linksClickable="true"/>
+
+            <!-- Optional: Privacy / Terms link line -->
+            <TextView
+                android:id="@+id/policyLink"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Privacy Policy: https://example.com/privacy"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:autoLink="web"
+                android:linksClickable="true"/>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- App Info (Version, Build, Disclaimer) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/appInfoCard"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="20dp"
+        app:strokeColor="?attr/colorOutline"
+        app:strokeWidth="1dp"
+        app:layout_constraintTop_toBottomOf="@id/contactCard"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_info_24"
+                    android:layout_marginEnd="8dp"
+                    app:tint="?attr/colorError"  />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="App Info"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                   />
+            </LinearLayout>
+
+            <!-- Dynamic: set these in code -->
+            <TextView
+                android:id="@+id/appVersion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Version —"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurface"/>
+
+            <TextView
+                android:id="@+id/appBuild"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Build —"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurface"/>
+
+            <!-- Optional context / disclaimer -->
+            <TextView
+                android:id="@+id/appDisclaimer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Disclaimer: This app provides tools to report and track incidents. For immediate emergencies, contact your local fire department."
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 

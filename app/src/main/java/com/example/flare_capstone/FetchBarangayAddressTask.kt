@@ -2,98 +2,89 @@ package com.example.flare_capstone
 
 import android.os.AsyncTask
 import android.util.Log
+import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
-import org.json.JSONObject
-import kotlin.collections.filter
-import kotlin.collections.isNotEmpty
-import kotlin.collections.joinToString
-import kotlin.text.isNotBlank
-import kotlin.text.isNotEmpty
-import kotlin.text.lowercase
-import kotlin.text.trim
 
 class FetchBarangayAddressTask(
-    private val activity: Any, // Now can be any activity (FireLevelActivity or OtherEmergencyActivity)
+    private val activity: Any, // FireLevelActivity or OtherEmergencyActivity
     private val latitude: Double,
-    private val longitude: Double,
-    private var fetchedAddress: String? = null
+    private val longitude: Double
 ) : AsyncTask<Void, Void, String?>() {
 
     override fun doInBackground(vararg params: Void?): String? {
+        var conn: HttpURLConnection? = null
         return try {
-            // OpenStreetMap Nominatim reverse geocode
             val url = URL(
                 "https://nominatim.openstreetmap.org/reverse?" +
                         "lat=$latitude&lon=$longitude&format=json&addressdetails=1&zoom=18"
             )
-            val urlConnection = url.openConnection() as HttpURLConnection
-            urlConnection.requestMethod = "GET"
-            urlConnection.connect()
-
-            val inputStreamReader = InputStreamReader(urlConnection.inputStream)
-            val response = StringBuilder()
-            var data = inputStreamReader.read()
-            while (data != -1) {
-                response.append(data.toChar())
-                data = inputStreamReader.read()
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                // REQUIRED by Nominatim: identify your app and provide a way to contact you
+                setRequestProperty("User-Agent", "FlareCapstone/1.0 (contact: anfredalbit20@example.com)")
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("Accept-Language", "en-PH,en;q=0.8")
+                connectTimeout = 10_000
+                readTimeout = 10_000
             }
 
-            val jsonResponse = JSONObject(response.toString())
-            val address = jsonResponse.getJSONObject("address")
-
-            Log.d("FetchBarangayAddress", "Full address JSON: $address")
-
-            val neighbourhoodKeys = listOf(
-                "neighbourhood", "suburb", "quarter", "hamlet",
-                "croft", "block", "locality", "residential"
+            val code = conn.responseCode
+            val body = readStreamAsString(
+                if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
             )
-            val barangayKeys = listOf("village", "barangay")
-            val cityKeys = listOf("city", "town")
+            if (code !in 200..299) {
+                Log.e("FetchBarangayAddress", "HTTP $code from Nominatim: $body")
+                return null
+            }
 
-            fun findFirstValid(keys: List<String>): String {
-                for (key in keys) {
-                    val value = address.optString(key).trim()
-                    Log.d("FetchBarangayAddress", "Checking $key: '$value'")
-                    if (value.isNotEmpty() && value.lowercase() != "null") {
-                        Log.d("FetchBarangayAddress", "Selected $key = '$value'")
-                        return value
-                    }
+            val json = JSONObject(body)
+            val addr = json.optJSONObject("address") ?: return null
+            Log.d("FetchBarangayAddress", "Full address JSON: $addr")
+
+            fun firstNonEmpty(vararg keys: String): String? {
+                for (k in keys) {
+                    val v = addr.optString(k).trim()
+                    if (v.isNotEmpty() && !v.equals("null", ignoreCase = true)) return v
                 }
-                return "N/A"
+                return null
             }
 
-            val neighbourhoodRaw = findFirstValid(neighbourhoodKeys)
-            val barangay = findFirstValid(barangayKeys)
-            val city = findFirstValid(cityKeys)
+            // Try common PH fields
+            val houseNo = firstNonEmpty("house_number")
+            val road = firstNonEmpty("road", "residential", "path", "pedestrian")
+            val neighRaw = firstNonEmpty(
+                "neighbourhood", "suburb", "quarter", "hamlet",
+                "locality", "residential", "block"
+            )
+            val barangay = firstNonEmpty(
+                "barangay", "suburb", "neighbourhood", "village", "city_district", "district"
+            )
+            val city = firstNonEmpty("city", "town", "municipality") ?: firstNonEmpty("county")
 
-            // Extract purok from raw neighborhood string
-            val purok = extractPurok(neighbourhoodRaw)
+            val purok = extractPurok(neighRaw)
+            val neigh = purok ?: neighRaw
 
-            // Use extracted purok if found, else use neighbourhood raw
-            val neighbourhood = purok ?: if (neighbourhoodRaw != "N/A") neighbourhoodRaw else null
+            val parts = mutableListOf<String>()
+            val roadLine = listOfNotNull(houseNo, road).joinToString(" ").trim()
+            if (roadLine.isNotEmpty()) parts += roadLine
+            if (!neigh.isNullOrBlank()) parts += neigh
+            if (!barangay.isNullOrBlank()) parts += barangay
+            if (!city.isNullOrBlank()) parts += city
 
-            // Compose final address string without province
-            val addressParts = listOfNotNull(neighbourhood, barangay, city)
-                .filter { it.isNotBlank() && it.lowercase() != "n/a" }
-
-            return if (addressParts.isNotEmpty()) {
-                addressParts.joinToString(", ")
-            } else {
-                null
-            }
-
+            parts.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: city
         } catch (e: Exception) {
-            e.printStackTrace()
-            Log.e("FetchBarangayAddress", "Exception fetching address: ${e.message}")
+            Log.e("FetchBarangayAddress", "Exception: ${e.message}", e)
             null
+        } finally {
+            conn?.disconnect()
         }
     }
 
     override fun onPostExecute(result: String?) {
         super.onPostExecute(result)
-        // Check the activity type and call the appropriate method to handle the fetched address
         when (activity) {
             is FireLevelActivity -> activity.handleFetchedAddress(result)
             is OtherEmergencyActivity -> activity.handleFetchedAddress(result)
@@ -101,16 +92,22 @@ class FetchBarangayAddressTask(
         }
     }
 
-    /**
-     * Extract "Purok <name>" from a string.
-     * Matches "Purok" followed by 1 or 2 words, ignoring extra words like "Chapel".
-     */
     private fun extractPurok(input: String?): String? {
-        if (input == null) return null
+        if (input.isNullOrBlank()) return null
+        val regex = Regex("""(?i)(Purok\s+\w+(?:\s+\w+)?)""")
+        return regex.find(input)?.value
+    }
 
-        // Regex: Purok + 1 or 2 words (letters/numbers), ignoring extras after that
-        val regex = Regex("""(?i)(Purok\s+\w+(\s+\w+)?)""")
-        val match = regex.find(input)
-        return match?.value
+    private fun readStreamAsString(stream: java.io.InputStream?): String {
+        if (stream == null) return ""
+        val sb = StringBuilder()
+        BufferedReader(InputStreamReader(stream)).use { br ->
+            var line = br.readLine()
+            while (line != null) {
+                sb.append(line)
+                line = br.readLine()
+            }
+        }
+        return sb.toString()
     }
 }

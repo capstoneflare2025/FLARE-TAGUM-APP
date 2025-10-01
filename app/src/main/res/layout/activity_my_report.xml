@@ -6,37 +6,29 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
-    <!-- Back Header -->
-    <RelativeLayout
-        android:id="@+id/header"
+    <!-- Top App Bar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topBar"
         android:layout_width="0dp"
-        android:layout_height="70dp"
-        android:layout_marginTop="-16dp"
+        android:layout_height="wrap_content"
+        app:title="My Report"
+        app:titleCentered="true"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <ImageView
-            android:id="@+id/back"
-            android:layout_width="25dp"
-            android:layout_height="25dp"
-            android:layout_marginTop="18dp"
-
-            android:layout_alignParentStart="true"
-            android:contentDescription="Go back"
-            android:background="@drawable/ic_back" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerHorizontal="true"
-            android:layout_marginTop="16dp"
-            android:gravity="center"
-            android:text="My Report"
-            android:textColor="?android:textColorPrimary"
-            android:textSize="25sp"
-            android:textStyle="bold" />
-    </RelativeLayout>
+    <!-- Keep your existing back ID -->
+    <ImageView
+        android:id="@+id/back"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:src="@drawable/ic_back"
+        android:contentDescription="@string/content_desc_navigate_up"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="4dp"
+        app:layout_constraintStart_toStartOf="@id/topBar"
+        app:layout_constraintTop_toTopOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="@id/topBar" />
 
     <SearchView
         android:id="@+id/searchView"
@@ -46,7 +38,7 @@
         android:background="@drawable/bg_searchview_rounded"
         android:queryHint="Search reports..."
         android:theme="@style/BlackSearchViewTheme"
-        app:layout_constraintTop_toBottomOf="@id/header"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 

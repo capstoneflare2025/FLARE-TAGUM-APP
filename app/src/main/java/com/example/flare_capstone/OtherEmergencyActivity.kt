@@ -2,6 +2,7 @@ package com.example.flare_capstone
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
 import android.net.ConnectivityManager
 import android.net.Network
@@ -15,6 +16,8 @@ import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.flare_capstone.databinding.ActivityOtherEmergencyBinding
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -36,10 +39,18 @@ class OtherEmergencyActivity : AppCompatActivity() {
     private var exactLocation: String = ""
 
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
+    private val SMS_PERMISSION_REQUEST_CODE = 101
     private var lastReportTime: Long = 0
 
     private lateinit var connectivityManager: ConnectivityManager
     private var loadingDialog: AlertDialog? = null
+
+    // ==== Tagum radius fallback (center ~City Hall; generous radius buffer) ====
+    private val TAGUM_CENTER_LAT = 7.447725
+    private val TAGUM_CENTER_LON = 125.804150
+    private val TAGUM_RADIUS_METERS = 11_000f // ~11 km buffer around center
+
+    private var tagumOk: Boolean = false // set true if text mentions Tagum OR inside Tagum radius
 
     private val TARGET_STATION_NODE = "MabiniFireStation"
 
@@ -49,7 +60,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
         "MabiniFireStation"     to "MabiniProfile"
     )
 
-    // Now using "OtherEmergency" node for Mabini
+    // "OtherEmergency" nodes
     private val otherEmergencyNodeByStation = mapOf(
         "LaFilipinaFireStation" to "LaFilipinaOtherEmergency",
         "CanocotanFireStation"  to "CanocotanOtherEmergency",
@@ -70,7 +81,6 @@ class OtherEmergencyActivity : AppCompatActivity() {
         override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemeManager.applyTheme(this)
         super.onCreate(savedInstanceState)
@@ -85,9 +95,12 @@ class OtherEmergencyActivity : AppCompatActivity() {
         if (!isConnected()) showLoadingDialog("No internet connection") else hideLoadingDialog()
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
-        binding.sendButton.isEnabled = false
+        // Start disabled until both: (1) emergency selected, (2) tagumOk true
+        updateSendEnabled()
 
-        getLastLocation()
+        // Location permission check & fetch
+        checkPermissionsAndGetLocation()
+
         updateEmergencyText("Select an Emergency")
 
         binding.floodingButton.setOnClickListener { handleEmergencySelection("Flooding") }
@@ -109,8 +122,19 @@ class OtherEmergencyActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please wait $wait seconds before submitting again.", Toast.LENGTH_LONG).show()
             }
         }
+
+        // Optional: ask for SMS permission proactively (since we send notifications)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), SMS_PERMISSION_REQUEST_CODE)
+        }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        kotlin.runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
+    }
+
+    // ---- Connectivity ----
     private fun isConnected(): Boolean {
         val active = connectivityManager.activeNetwork ?: return false
         val caps = connectivityManager.getNetworkCapabilities(active) ?: return false
@@ -131,19 +155,53 @@ class OtherEmergencyActivity : AppCompatActivity() {
 
     private fun hideLoadingDialog() { loadingDialog?.dismiss() }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        connectivityManager.unregisterNetworkCallback(networkCallback)
+    // ---- Permissions & Location ----
+    private fun checkPermissionsAndGetLocation() {
+        val fineOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fineOk && coarseOk) {
+            getLastLocation()
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                LOCATION_PERMISSION_REQUEST_CODE
+            )
+        }
     }
 
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun getLastLocation() {
+        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                latitude = loc.latitude
+                longitude = loc.longitude
+                // kick off reverse-geocode
+                FetchBarangayAddressTask(this, latitude, longitude).execute()
+                // also compute radius check early (in case geocode fails)
+                evaluateTagumGateWith(null)
+            } else {
+                Toast.makeText(this, "Unable to get current location", Toast.LENGTH_SHORT).show()
+                evaluateTagumGateWith(null)
+            }
+        }.addOnFailureListener {
+            Toast.makeText(this, "Failed to get location: ${it.message}", Toast.LENGTH_SHORT).show()
+            evaluateTagumGateWith(null)
+        }
+    }
+
+    // ---- Emergency selection / UI ----
     private fun handleEmergencySelection(type: String) {
         selectedEmergency = type
-        enableSendButton()
         updateButtonAppearance(selectedEmergency)
         updateEmergencyText("$type Selected")
+        updateSendEnabled()
     }
 
-    private fun enableSendButton() { binding.sendButton.isEnabled = true }
+    private fun updateSendEnabled() {
+        val enabled = (selectedEmergency != null) && tagumOk
+        binding.sendButton.isEnabled = enabled
+    }
 
     private fun updateButtonAppearance(selected: String?) {
         resetButtonAppearance(binding.floodingButton)
@@ -165,23 +223,45 @@ class OtherEmergencyActivity : AppCompatActivity() {
         binding.title.setTextColor(resources.getColor(android.R.color.holo_red_dark))
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-    private fun getLastLocation() {
-        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                latitude = loc.latitude
-                longitude = loc.longitude
-                FetchBarangayAddressTask(this, latitude, longitude).execute()
-            } else {
-                Toast.makeText(this, "Unable to get current location", Toast.LENGTH_SHORT).show()
-            }
-        }
+    // ---- Tagum helpers (same logic as FireLevelActivity) ----
+    private fun isWithinTagumByDistance(lat: Double, lon: Double): Boolean {
+        val d = calculateDistance(lat, lon, TAGUM_CENTER_LAT, TAGUM_CENTER_LON)
+        return d <= TAGUM_RADIUS_METERS
     }
 
+    private fun looksLikeTagum(text: String?): Boolean {
+        if (text.isNullOrBlank()) return false
+        return text.contains("tagum", ignoreCase = true) // matches "Tagum" or "Tagum City"
+    }
+
+    /** Called by FetchBarangayAddressTask when reverse geocoding returns. */
     fun handleFetchedAddress(address: String?) {
-        exactLocation = address ?: "Unknown Location"
+        exactLocation = address?.trim().orEmpty().ifEmpty { "Unknown Location" }
+        evaluateTagumGateWith(address)
     }
 
+    private fun evaluateTagumGateWith(address: String?) {
+        val textOk = looksLikeTagum(address?.trim())
+        val geoOk  = isWithinTagumByDistance(latitude, longitude)
+
+        tagumOk = textOk || geoOk
+
+        if (tagumOk) {
+            if (address.isNullOrBlank() && geoOk) {
+                exactLocation = "Within Tagum vicinity – https://www.google.com/maps?q=$latitude,$longitude"
+            }
+            Toast.makeText(
+                this,
+                "Location confirmed: ${if (exactLocation.isNotBlank()) exactLocation else "within Tagum radius"}",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            Toast.makeText(this, "Outside Tagum area. You can't submit a report.", Toast.LENGTH_SHORT).show()
+        }
+        updateSendEnabled()
+    }
+
+    // ---- Firebase helpers ----
     private fun anyToString(v: Any?): String = when (v) {
         is String -> v
         is Number -> v.toString()
@@ -216,7 +296,13 @@ class OtherEmergencyActivity : AppCompatActivity() {
             .addOnFailureListener { onDone(null) }
     }
 
+    // ---- Submit report ----
     private fun sendEmergencyReport(currentTime: Long) {
+        if (!tagumOk) {
+            Toast.makeText(this, "Reporting is allowed only within Tagum.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val userId = auth.currentUser?.uid
         val type = selectedEmergency
         if (userId == null || type == null) {
@@ -286,9 +372,16 @@ class OtherEmergencyActivity : AppCompatActivity() {
             }
     }
 
+    // ---- SMS ----
     private fun sendSMSNotificationToStation(stationContact: String, emergency: OtherEmergency) {
         if (stationContact.isEmpty() || stationContact == "N/A") {
             Toast.makeText(this, "Fire station contact not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val permissionGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+        if (!permissionGranted) {
+            Toast.makeText(this, "SMS permission not granted.", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -316,6 +409,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
         }
     }
 
+    // ---- Utils ----
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
         val results = FloatArray(1)
         Location.distanceBetween(lat1, lon1, lat2, lon2, results)

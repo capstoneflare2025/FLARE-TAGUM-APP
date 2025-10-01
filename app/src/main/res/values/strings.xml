@@ -4,4 +4,36 @@
     <!-- res/values/strings.xml -->
     <string name="google_routes_key">AIzaSyCNyhUph8_RefB5yw_lr43J_7AMkeYICfU</string>
 
+    <!-- res/values/strings.xml -->
+    <string name="content_desc_profile_photo">Profile photo</string>
+    <string name="content_desc_edit_profile_icon">Edit profile</string>
+    <string name="content_desc_change_password_icon">Change password</string>
+    <string name="content_desc_my_report_icon">My report</string>
+    <string name="content_desc_logout_icon">Logout</string>
+    <string name="content_desc_navigate">Navigate</string>
+
+    <string name="content_desc_dark_mode_icon">Dark mode</string>
+    <string name="content_desc_about_icon">About</string>
+    <string name="content_desc_guide_icon">User guide</string>
+    <string name="content_desc_station_icon">Fire station info</string>
+
+    <string name="content_desc_navigate_up">Go back</string>
+    <string name="content_desc_change_photo">Change photo</string>
+
+    <string name="content_desc_icon_current_loc">Current location icon</string>
+    <string name="content_desc_icon_near_station">Near station icon</string>
+    <string name="content_desc_icon_far_station">Far station icon</string>
+
+    <string name="content_desc_icon_map_title">Map section icon</string>
+    <string name="content_desc_icon_fire_title">Fire section icon</string>
+    <string name="content_desc_icon_other_title">Other emergencies section icon</string>
+
+    <string name="content_desc_phone_icon">Phone number</string>
+
+    <string name="content_desc_sort">Sort reports</string>
+    <string name="content_desc_reports_list">List of reports</string>
+    <string name="content_desc_empty">Empty state</string>
+
+
+
 </resources>

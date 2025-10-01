@@ -2,4 +2,5 @@
 <resources>
     <dimen name="profile_size">120dp</dimen>
     <dimen name="profile_padding">6dp</dimen>
+
 </resources>

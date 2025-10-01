@@ -53,6 +53,11 @@ class FireLevelActivity : AppCompatActivity() {
     private lateinit var connectivityManager: ConnectivityManager
     private var loadingDialog: AlertDialog? = null
 
+    // ==== Tagum radius fallback (center ~City Hall; generous radius buffer) ====
+    private val TAGUM_CENTER_LAT = 7.447725
+    private val TAGUM_CENTER_LON = 125.804150
+    private val TAGUM_RADIUS_METERS = 11_000f // ~11 km buffer around center
+
     // Station profile/report mapping
     private val profileKeyByStation = mapOf(
         "LaFilipinaFireStation" to "LaFilipinaProfile",
@@ -110,9 +115,10 @@ class FireLevelActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        connectivityManager.unregisterNetworkCallback(networkCallback)
+        kotlin.runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
     }
 
+    // ---- Connectivity ----
     private fun isConnected(): Boolean {
         val activeNetwork = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
@@ -135,6 +141,7 @@ class FireLevelActivity : AppCompatActivity() {
         loadingDialog?.dismiss()
     }
 
+    // ---- Permissions & Location ----
     private fun checkPermissionsAndGetLocation() {
         val fineOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarseOk = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -158,7 +165,8 @@ class FireLevelActivity : AppCompatActivity() {
         hourAdapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
         binding.spinnerHour.adapter = hourAdapter
 
-        val minuteAdapter = ArrayAdapter(this, R.layout.simple_spinner_item, (1..60).toList())
+        // Minutes should be 0..59 (fix)
+        val minuteAdapter = ArrayAdapter(this, R.layout.simple_spinner_item, (0..59).toList())
         minuteAdapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
         binding.spinnerMinute.adapter = minuteAdapter
 
@@ -184,11 +192,24 @@ class FireLevelActivity : AppCompatActivity() {
                 longitude = it.longitude
                 fusedLocationClient.removeLocationUpdates(this)
                 hideLoadingDialog()
+                // Your existing reverse-geocode task:
                 FetchBarangayAddressTask(this@FireLevelActivity, latitude, longitude).execute()
             }
         }
     }
 
+    // ---- Helpers for Tagum checks ----
+    private fun isWithinTagumByDistance(lat: Double, lon: Double): Boolean {
+        val d = calculateDistance(lat, lon, TAGUM_CENTER_LAT, TAGUM_CENTER_LON)
+        return d <= TAGUM_RADIUS_METERS
+    }
+
+    private fun looksLikeTagum(text: String?): Boolean {
+        if (text.isNullOrBlank()) return false
+        return text.contains("tagum", ignoreCase = true) // matches "Tagum" or "Tagum City"
+    }
+
+    // ---- Report flow ----
     private fun checkAndSendAlertReport() {
         val now = System.currentTimeMillis()
         if (now - lastReportTime >= 5 * 60 * 1000) {
@@ -323,10 +344,9 @@ class FireLevelActivity : AppCompatActivity() {
                                 exactLocation = readableAddress.orEmpty(),
                                 timeStamp = currentTime,
                                 status = "Pending",
-                                fireStationName = nearest.name,   // <-- set it here
+                                fireStationName = nearest.name,
                                 read = false
                             )
-
 
                             val db = FirebaseDatabase.getInstance().reference
                             db.child(nearest.stationNode)
@@ -428,15 +448,29 @@ class FireLevelActivity : AppCompatActivity() {
         return results[0]
     }
 
+    // === UPDATED: accept Tagum if either address text says "Tagum" OR device is inside the Tagum radius ===
     fun handleFetchedAddress(address: String?) {
-        if (addressHandled) return
-        addressHandled = true
-        readableAddress = address
-        if (readableAddress != null && readableAddress!!.contains("Tagum City", ignoreCase = true)) {
-            Toast.makeText(this, "Location confirmed: $readableAddress", Toast.LENGTH_SHORT).show()
+        val cleaned = address?.trim().orEmpty()
+        val textOk = looksLikeTagum(cleaned)
+        val geoOk  = isWithinTagumByDistance(latitude, longitude)
+
+        val finalAddress = when {
+            cleaned.isNotBlank() -> cleaned
+            geoOk -> "Within Tagum vicinity – https://www.google.com/maps?q=$latitude,$longitude"
+            else -> ""
+        }
+
+        readableAddress = finalAddress
+
+        if (textOk || geoOk) {
+            binding.sendButton.isEnabled = true
+            Toast.makeText(this, "Location confirmed: ${if (finalAddress.isNotBlank()) finalAddress else "within Tagum radius"}", Toast.LENGTH_SHORT).show()
+            addressHandled = true
         } else {
-            Toast.makeText(this, "Address not in Tagum City. You can't submit a report.", Toast.LENGTH_SHORT).show()
             binding.sendButton.isEnabled = false
+            Toast.makeText(this, "Outside Tagum area. You can't submit a report.", Toast.LENGTH_SHORT).show()
+            // Leave addressHandled=false so we can retry on next entry
         }
     }
+
 }

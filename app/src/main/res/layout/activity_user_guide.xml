@@ -1,14 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="16dp">
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:title="User Guide"
+        app:titleCentered="true"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <ImageView
+        android:id="@+id/back"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:src="@drawable/ic_back"
+        android:contentDescription="@string/content_desc_navigate_up"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="4dp"
+        app:layout_constraintStart_toStartOf="@id/topBar"
+        app:layout_constraintTop_toTopOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="@id/topBar" />
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -19,196 +43,217 @@
             android:orientation="vertical"
             android:paddingBottom="24dp">
 
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="70dp"
-                android:layout_marginTop="-10dp">
-
-                <ImageView
-                    android:id="@+id/back"
-                    android:layout_width="25dp"
-                    android:layout_height="25dp"
-                    android:layout_marginTop="18dp"
-                    android:background="@drawable/ic_back" />
-
-                <!-- Title Section -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="105dp"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center"
-                    android:text="User Guide"
-                    android:textAlignment="center"
-                    android:textColor="?android:textColorPrimary"
-                    android:textSize="25sp"
-                    android:textStyle="bold" />
-
-            </RelativeLayout>
-
-            <!-- Card: Map Icons -->
-            <androidx.cardview.widget.CardView
+            <!-- Map Icon Locations -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/mapIconsCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="50dp"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="6dp">
+                android:layout_marginTop="12dp"
+                app:cardCornerRadius="20dp"
+                app:cardUseCompatPadding="true"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="20dp">
 
-                    <TextView
+                    <!-- title row with icon -->
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="📍 Map Icon Locations"
-                        android:textStyle="bold"
-                        android:textSize="19sp"
-                        android:textColor="?android:textColorPrimary"
-                        android:layout_marginBottom="8dp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
 
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@drawable/ic_map_pin_24"
+                            app:tint="?attr/colorError"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="@string/content_desc_icon_map_title"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Map Icon Locations"
+                            android:textStyle="bold"
+                            android:textSize="16sp"
+                            />
+                    </LinearLayout>
+
+                    <!-- legend rows... (unchanged) -->
                     <!-- Blue Pin -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginBottom="8dp"
-                        android:layout_marginTop="10dp">
-
+                        android:layout_marginTop="8dp">
                         <ImageView
-                            android:layout_width="30dp"
-                            android:layout_height="30dp"
-                            android:layout_marginEnd="8dp"
-                            android:src="@drawable/your_location" />
-
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_marginEnd="12dp"
+                            android:src="@drawable/your_location"
+                            android:contentDescription="@string/content_desc_icon_current_loc"/>
                         <TextView
                             android:layout_width="wrap_content"
-                            android:layout_height="30dp"
-                            android:text="Blue Pin – Current location"
-                            android:textColor="?android:textColorSecondary"
-                            android:textSize="19sp" />
+                            android:layout_height="wrap_content"
+                            android:text="Blue Pin — Current location"
+                            android:textSize="14sp"
+                            android:textColor="?attr/colorOnSurface"/>
                     </LinearLayout>
 
-                    <!-- Green Pin -->
+                    <!-- Yellow Pin -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginBottom="8dp">
-
+                        android:layout_marginTop="10dp">
                         <ImageView
-                            android:layout_width="30dp"
-                            android:layout_height="30dp"
-                            android:layout_marginEnd="8dp"
-                            android:src="@drawable/near_location" />
-
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_marginEnd="12dp"
+                            android:src="@drawable/near_location"
+                            android:contentDescription="@string/content_desc_icon_near_station"/>
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Yellow Pin – Near Fire Station"
-                            android:textSize="19sp"
-                            android:textColor="?android:textColorSecondary"/>
+                            android:text="Yellow Pin — Near Fire Station"
+                            android:textSize="14sp"
+                            android:textColor="?attr/colorOnSurface"/>
                     </LinearLayout>
 
-                    <!-- Red Pin -->
+                    <!-- Brown Pin -->
                     <LinearLayout
                         android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="10dp">
+                        <ImageView
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_marginEnd="12dp"
+                            android:src="@drawable/far_location"
+                            android:contentDescription="@string/content_desc_icon_far_station"/>
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Brown Pin — Far Fire Station"
+                            android:textSize="14sp"
+                            android:textColor="?attr/colorOnSurface"/>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Reporting a Fire -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/reportFireCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardCornerRadius="20dp"
+                app:cardUseCompatPadding="true"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
 
                         <ImageView
-                            android:layout_width="30dp"
-                            android:layout_height="30dp"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@drawable/ic_fire_24"
                             android:layout_marginEnd="8dp"
-                            android:src="@drawable/far_location" />
+                            android:contentDescription="@string/content_desc_icon_fire_title"
+                            app:tint="?attr/colorError"  />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Brown Pin – Far Fire Station"
-                            android:textSize="19sp"
-                            android:textColor="?android:textColorSecondary" />
+                            android:text="Reporting a Fire"
+                            android:textStyle="bold"
+                            android:textSize="16sp"
+                           />
                     </LinearLayout>
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
 
-            <!-- Card: Reporting a Fire -->
-            <androidx.cardview.widget.CardView
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="1) Tap the Report button.\n2) Select Fire.\n3) Answer the questions (time started, affected houses, etc.).\n4) Tap Send to submit or Cancel to discard."
+                        android:textSize="14sp"
+                        android:textColor="?attr/colorOnSurface" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Reporting Other Emergencies -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/reportOtherCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:layout_marginTop="10dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="6dp">
+                android:layout_marginTop="16dp"
+                app:cardCornerRadius="20dp"
+                app:cardUseCompatPadding="true"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="20dp">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🔥 Reporting a Fire"
-                        android:textStyle="bold"
-                        android:textSize="19sp"
-                        android:textColor="?android:textColorPrimary"
-                        android:layout_marginBottom="8dp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@drawable/ic_warning_24"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="@string/content_desc_icon_other_title"
+                            app:tint="?attr/colorError"  />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Reporting Other Emergencies"
+                            android:textStyle="bold"
+                            android:textSize="16sp"
+                            />
+                    </LinearLayout>
 
                     <TextView
-                        android:layout_marginTop="10dp"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="1. Tap the Report button.\n \n2. Select Fire.\n \n3. Answer the questions:\n \n   - What time did the fire start?\n\n   - How many houses were affected?\n\n4. Tap Send to submit or Cancel to discard."
-                        android:textSize="18sp"
-                        android:textColor="?android:textColorPrimary" />
+                        android:layout_marginTop="6dp"
+                        android:text="1) Tap the Other button.\n2) Select the type of emergency (Flooding, Building Collapse, Gas Leak, Fallen Tree, etc.).\n3) Tap Send to submit or Cancel to discard."
+                        android:textSize="14sp"
+                        android:textColor="?attr/colorOnSurface" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-
-            <!-- Card: Reporting Other Emergencies -->
-            <androidx.cardview.widget.CardView
+            <Space
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:layout_marginTop="10dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="6dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🚨 Reporting Other Emergencies"
-                        android:textStyle="bold"
-                        android:textSize="19sp"
-                        android:textColor="?android:textColorPrimary"
-                        android:layout_marginBottom="8dp" />
-
-                    <TextView
-                        android:layout_marginTop="10dp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="1. Tap the Other button.\n\n2. Select the type of emergency:\n\n   - Flooding\n\n   - Building Collapse\n\n   - Gas Leak\n\n   - Fallen Tree\n\n3. Tap Send to submit or Cancel to discard."
-                        android:textSize="18sp"
-                        android:textColor="?android:textColorPrimary" />
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
-
-
+                android:layout_height="16dp"/>
         </LinearLayout>
-    </ScrollView>
-
+    </androidx.core.widget.NestedScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -4,26 +4,25 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
-    <!-- Title -->
+    <!-- Title (kept your id) -->
     <TextView
-        android:id="@+id/fire_level_title"
+        android:id="@+id/titleText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="INBOX"
         android:textSize="25sp"
         android:textStyle="bold"
         android:textColor="#E00024"
-        android:letterSpacing="0.05"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"/>
 
     <!-- Search Bar -->
     <androidx.appcompat.widget.SearchView
         android:id="@+id/searchView"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        app:layout_constraintTop_toBottomOf="@id/fire_level_title"
+        app:layout_constraintTop_toBottomOf="@id/titleText"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:queryHint="Search Fire Stations"
