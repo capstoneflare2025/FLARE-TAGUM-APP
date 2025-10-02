@@ -12,7 +12,8 @@ data class ResponseMessage(
     val responseTime: String = "00:00:00",
     var imageBase64: String? = null,
     val timestamp: Long? = 0L,
-    var isRead: Boolean = false
+    var isRead: Boolean = false,
+    var category: String? = null // "fire" / "other"
 ) {
     fun getIsRead(): Boolean = isRead
     fun setIsRead(isRead: Boolean) { this.isRead = isRead }

@@ -52,8 +52,6 @@ class OtherEmergencyActivity : AppCompatActivity() {
 
     private var tagumOk: Boolean = false // set true if text mentions Tagum OR inside Tagum radius
 
-    private val TARGET_STATION_NODE = "MabiniFireStation"
-
     private val profileKeyByStation = mapOf(
         "LaFilipinaFireStation" to "LaFilipinaProfile",
         "CanocotanFireStation"  to "CanocotanProfile",
@@ -250,11 +248,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
             if (address.isNullOrBlank() && geoOk) {
                 exactLocation = "Within Tagum vicinity – https://www.google.com/maps?q=$latitude,$longitude"
             }
-            Toast.makeText(
-                this,
-                "Location confirmed: ${if (exactLocation.isNotBlank()) exactLocation else "within Tagum radius"}",
-                Toast.LENGTH_SHORT
-            ).show()
+
         } else {
             Toast.makeText(this, "Outside Tagum area. You can't submit a report.", Toast.LENGTH_SHORT).show()
         }
@@ -296,7 +290,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
             .addOnFailureListener { onDone(null) }
     }
 
-    // ---- Submit report ----
+    // ---- Submit report (routes to nearest station) ----
     private fun sendEmergencyReport(currentTime: Long) {
         if (!tagumOk) {
             Toast.makeText(this, "Reporting is allowed only within Tagum.", Toast.LENGTH_SHORT).show()
@@ -319,52 +313,63 @@ class OtherEmergencyActivity : AppCompatActivity() {
                     return@addOnSuccessListener
                 }
 
-                readStationProfile(TARGET_STATION_NODE) { station ->
-                    if (station == null) {
-                        Toast.makeText(this, "Target station profile not found", Toast.LENGTH_SHORT).show()
-                        return@readStationProfile
-                    }
+                // Fetch all station profiles, pick nearest
+                readStationProfile("LaFilipinaFireStation") { la ->
+                    readStationProfile("CanocotanFireStation") { cano ->
+                        readStationProfile("MabiniFireStation") { mabini ->
 
-                    val dateFmt = SimpleDateFormat("MM/dd/yy", Locale.getDefault())
-                    val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-                    val formattedDate = dateFmt.format(Date(currentTime))
-                    val formattedTime = timeFmt.format(Date(currentTime))
-                    val mapsUrl = "https://www.google.com/maps?q=$latitude,$longitude"
+                            val stations = listOfNotNull(la, cano, mabini)
+                            if (stations.isEmpty()) {
+                                Toast.makeText(this, "No station profiles found", Toast.LENGTH_SHORT).show()
+                                return@readStationProfile
+                            }
 
-                    val otherEmergency = OtherEmergency(
-                        emergencyType = type,
-                        name = user.name.toString(),
-                        contact = user.contact.toString(),
-                        date = formattedDate,
-                        reportTime = formattedTime,
-                        latitude = latitude.toString(),
-                        longitude = longitude.toString(),
-                        location = mapsUrl,
-                        exactLocation = exactLocation,
-                        lastReportedTime = currentTime,
-                        timestamp = currentTime,
-                        read = false,
-                        fireStationName = station.name
-                    )
+                            val nearest = stations.minByOrNull {
+                                calculateDistance(latitude, longitude, it.lat, it.lon)
+                            }!!
 
-                    val db = FirebaseDatabase.getInstance().reference
-                    db.child(station.stationNode)
-                        .child(station.reportNode) // e.g., MabiniOtherEmergency
-                        .push()
-                        .setValue(otherEmergency)
-                        .addOnSuccessListener {
-                            lastReportTime = currentTime
-                            Toast.makeText(this, "Emergency report submitted to ${station.name}", Toast.LENGTH_SHORT).show()
-                            sendSMSNotificationToStation(
-                                stationContact = station.contact.ifEmpty { "N/A" },
-                                emergency = otherEmergency
+                            val dateFmt = SimpleDateFormat("MM/dd/yy", Locale.getDefault())
+                            val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                            val formattedDate = dateFmt.format(Date(currentTime))
+                            val formattedTime = timeFmt.format(Date(currentTime))
+                            val mapsUrl = "https://www.google.com/maps?q=$latitude,$longitude"
+
+                            val otherEmergency = OtherEmergency(
+                                emergencyType = type,
+                                name = user.name.toString(),
+                                contact = user.contact.toString(),
+                                date = formattedDate,
+                                reportTime = formattedTime,
+                                latitude = latitude.toString(),
+                                longitude = longitude.toString(),
+                                location = mapsUrl,
+                                exactLocation = exactLocation,
+                                lastReportedTime = currentTime,
+                                timestamp = currentTime,
+                                read = false,
+                                fireStationName = nearest.name
                             )
-                            startActivity(Intent(this, DashboardActivity::class.java))
-                            finish()
+
+                            val db = FirebaseDatabase.getInstance().reference
+                            db.child(nearest.stationNode)
+                                .child(nearest.reportNode) // e.g., LaFilipinaOtherEmergency
+                                .push()
+                                .setValue(otherEmergency)
+                                .addOnSuccessListener {
+                                    lastReportTime = currentTime
+                                    Toast.makeText(this, "Emergency report submitted to ${nearest.name}", Toast.LENGTH_SHORT).show()
+                                    sendSMSNotificationToStation(
+                                        stationContact = nearest.contact.ifEmpty { "N/A" },
+                                        emergency = otherEmergency
+                                    )
+                                    startActivity(Intent(this, DashboardActivity::class.java))
+                                    finish()
+                                }
+                                .addOnFailureListener {
+                                    Toast.makeText(this, "Failed to submit emergency report: ${it.message}", Toast.LENGTH_SHORT).show()
+                                }
                         }
-                        .addOnFailureListener {
-                            Toast.makeText(this, "Failed to submit emergency report: ${it.message}", Toast.LENGTH_SHORT).show()
-                        }
+                    }
                 }
             }
             .addOnFailureListener {

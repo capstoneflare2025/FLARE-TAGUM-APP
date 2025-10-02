@@ -6,7 +6,6 @@
     android:layout_height="match_parent"
     android:padding="12dp">
 
-    <!-- (Hidden) title kept for compatibility -->
     <TextView
         android:id="@+id/titleText"
         android:layout_width="wrap_content"
@@ -19,7 +18,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- Top bar: pill search (Option A) -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/searchBar"
         android:layout_width="0dp"
@@ -50,7 +48,6 @@
                 android:src="@drawable/ic_search_24"
                 app:tint="?attr/colorOnSurfaceVariant" />
 
-            <!-- NEW: inline EditText that filters as you type -->
             <EditText
                 android:id="@+id/searchInput"
                 android:layout_width="0dp"
@@ -68,7 +65,6 @@
                 android:paddingTop="0dp"
                 android:paddingBottom="0dp" />
 
-
             <ImageButton
                 android:id="@+id/voiceBtn"
                 android:layout_width="36dp"
@@ -76,11 +72,9 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_mic_24"
                 app:tint="?attr/colorOnSurfaceVariant" />
-
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Stories row: horizontal RecyclerView -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/storiesRecycler"
         android:layout_width="0dp"
@@ -93,8 +87,46 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
+    <!-- Category chips styled like tabs -->
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/categoryChips"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        app:singleSelection="true"
+        app:selectionRequired="true"
+        app:layout_constraintTop_toBottomOf="@id/storiesRecycler"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
-    <!-- Tabs -->
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipFire"
+            style="@style/Widget.MaterialComponents.Chip.Choice"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Fire Report"
+            android:checked="true"
+            android:textColor="@color/chip_text_selector"
+            app:chipBackgroundColor="@color/chip_bg_selector"
+            app:chipStrokeWidth="1dp"
+            app:chipStrokeColor="?attr/colorOutline"
+            app:rippleColor="?attr/colorSecondary"
+            app:checkedIconVisible="false"/>
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipOther"
+            style="@style/Widget.MaterialComponents.Chip.Choice"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Other Emergency"
+            android:textColor="@color/chip_text_selector"
+            app:chipBackgroundColor="@color/chip_bg_selector"
+            app:chipStrokeWidth="1dp"
+            app:chipStrokeColor="?attr/colorOutline"
+            app:rippleColor="?attr/colorSecondary"
+            app:checkedIconVisible="false"/>
+    </com.google.android.material.chip.ChipGroup>
+
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayout"
         android:layout_width="0dp"
@@ -105,7 +137,7 @@
         app:tabIndicatorColor="#E00024"
         app:tabSelectedTextColor="#000000"
         app:tabTextColor="#9AA0A6"
-        app:layout_constraintTop_toBottomOf="@id/storiesRecycler"
+        app:layout_constraintTop_toBottomOf="@id/categoryChips"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -123,7 +155,6 @@
             android:text="UnRead"/>
     </com.google.android.material.tabs.TabLayout>
 
-    <!-- Empty-state -->
     <TextView
         android:id="@+id/noMessagesText"
         android:layout_width="wrap_content"
@@ -137,7 +168,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="12dp"/>
 
-    <!-- Chats list -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="0dp"

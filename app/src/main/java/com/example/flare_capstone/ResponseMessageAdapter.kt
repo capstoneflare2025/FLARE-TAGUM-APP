@@ -19,29 +19,39 @@ class ResponseMessageAdapter(
 ) : RecyclerView.Adapter<ResponseMessageAdapter.ResponseMessageViewHolder>() {
 
     /** Cache latest preview per thread to prevent flicker on scroll */
-    private val lastPreviewByThread = mutableMapOf<String, Pair<Boolean /*fromUser*/, String /*text*/>>()
+    private val lastPreviewByThread =
+        mutableMapOf<String, Pair<Boolean /*fromUser*/, String /*text*/>>()
 
-    // Fallback resolver only if stationNode is missing on the item
+    // Station fallback resolver
     private val stationNodeByDisplayName = mapOf(
         "LaFilipina Fire Station" to "LaFilipinaFireStation",
-        "Canocotan Fire Station"   to "CanocotanFireStation",
-        "Mabini Fire Station"      to "MabiniFireStation",
-        "LaFilipinaFireStation"    to "LaFilipinaFireStation",
-        "CanocotanFireStation"     to "CanocotanFireStation",
-        "MabiniFireStation"        to "MabiniFireStation"
+        "Canocotan Fire Station"  to "CanocotanFireStation",
+        "Mabini Fire Station"     to "MabiniFireStation",
+        "LaFilipinaFireStation"   to "LaFilipinaFireStation",
+        "CanocotanFireStation"    to "CanocotanFireStation",
+        "MabiniFireStation"       to "MabiniFireStation"
     )
 
-    private val reportNodeByStationNode = mapOf(
+    // Fire nodes
+    private val fireReportNodeByStationNode = mapOf(
         "LaFilipinaFireStation" to "LaFilipinaFireReport",
         "CanocotanFireStation"  to "CanocotanFireReport",
         "MabiniFireStation"     to "MabiniFireReport"
+    )
+
+    // Other emergency nodes
+    private val otherReportNodeByStationNode = mapOf(
+        "LaFilipinaFireStation" to "LaFilipinaOtherEmergency",
+        "CanocotanFireStation"  to "CanocotanOtherEmergency",
+        "MabiniFireStation"     to "MabiniOtherEmergency"
     )
 
     inner class ResponseMessageViewHolder(val binding: ItemFireStationBinding) :
         RecyclerView.ViewHolder(binding.root)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ResponseMessageViewHolder {
-        val binding = ItemFireStationBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        val binding =
+            ItemFireStationBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         return ResponseMessageViewHolder(binding)
     }
 
@@ -57,7 +67,14 @@ class ResponseMessageAdapter(
         val displayName = item.fireStationName ?: "Unknown Fire Station"
 
         val stationNode = item.stationNode ?: stationNodeByDisplayName[displayName]
-        val reportNode = stationNode?.let { reportNodeByStationNode[it] }
+
+        // ✅ pick FireReport vs OtherEmergency depending on category
+        val reportNode = when (item.category?.lowercase(Locale.getDefault())) {
+            "fire"  -> stationNode?.let { fireReportNodeByStationNode[it] }
+            "other" -> stationNode?.let { otherReportNodeByStationNode[it] }
+            else    -> null
+        }
+
         val isUnread = !item.isRead
 
         // Title + time
@@ -71,11 +88,16 @@ class ResponseMessageAdapter(
         // Consistent thread id
         val threadId = item.incidentId ?: item.uid
 
-        // If we can’t resolve nodes or thread id, fallback to legacy responseMessage text
+        // Fallback preview if no nodes
         if (stationNode.isNullOrBlank() || reportNode.isNullOrBlank() || threadId.isNullOrBlank()) {
-            applyPreview(holder, fromUser = false, text = item.responseMessage.orEmpty(), isUnread = isUnread)
+            applyPreview(
+                holder,
+                fromUser = false,
+                text = item.responseMessage.orEmpty(),
+                isUnread = isUnread
+            )
         } else {
-            // Use cache immediately to avoid flicker
+            // Use cache immediately
             val cached = lastPreviewByThread[threadId]
             if (cached != null) {
                 applyPreview(holder, cached.first, cached.second, isUnread)
@@ -83,17 +105,16 @@ class ResponseMessageAdapter(
                 applyPreview(holder, fromUser = false, text = "Loading…", isUnread = isUnread)
             }
 
-            // Tag view with threadId to guard against recycling
+            // Tag view with threadId to avoid recycling mismatch
             holder.itemView.tag = threadId
 
-            // Always fetch the true latest message by timestamp
+            // Always fetch true latest message
             FirebaseDatabase.getInstance().reference
                 .child(stationNode).child(reportNode).child(threadId).child("messages")
                 .orderByChild("timestamp")
                 .limitToLast(1)
                 .addListenerForSingleValueEvent(object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
-                        // Ensure still bound to same thread
                         if (holder.bindingAdapterPosition == RecyclerView.NO_POSITION) return
                         if (holder.itemView.tag != threadId) return
 
@@ -102,28 +123,21 @@ class ResponseMessageAdapter(
 
                         val msg = snapshot.children.firstOrNull()
                         if (msg != null) {
-                            // Text/body: support common field names
                             text = msg.child("text").getValue(String::class.java)
                                 ?: msg.child("message").getValue(String::class.java)
                                         ?: msg.child("body").getValue(String::class.java)
                                         ?: ""
 
-                            // Use TYPE to decide prefix
-                            // type == "reply" -> from user; type == "response" -> from station
                             val type = msg.child("type").getValue(String::class.java)
                                 ?.trim()?.lowercase(Locale.getDefault())
                             fromUser = type == "reply" // reporter/user message
-                            // if "response", fromUser remains false (station)
                         }
 
-                        // Update cache + UI
                         lastPreviewByThread[threadId] = fromUser to text
                         applyPreview(holder, fromUser, text, isUnread)
                     }
 
-                    override fun onCancelled(error: DatabaseError) {
-                        // Keep placeholder/cache on error
-                    }
+                    override fun onCancelled(error: DatabaseError) {}
                 })
         }
 
@@ -131,15 +145,20 @@ class ResponseMessageAdapter(
         holder.binding.root.setOnClickListener {
             val validThreadId = threadId
             if (validThreadId.isNullOrBlank()) {
-                Toast.makeText(holder.itemView.context, "Thread id missing.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(holder.itemView.context, "Thread id missing.", Toast.LENGTH_SHORT)
+                    .show()
                 return@setOnClickListener
             }
             if (stationNode.isNullOrBlank() || reportNode.isNullOrBlank()) {
-                Toast.makeText(holder.itemView.context, "Missing station/report node.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    holder.itemView.context,
+                    "Missing station/report node.",
+                    Toast.LENGTH_SHORT
+                ).show()
                 return@setOnClickListener
             }
 
-            // Mark all messages in thread as read
+            // Mark as read in Firebase
             FirebaseDatabase.getInstance().reference
                 .child(stationNode).child(reportNode).child(validThreadId).child("messages")
                 .get()
@@ -148,12 +167,13 @@ class ResponseMessageAdapter(
                     snap.children.forEach { m -> updates["${m.key}/isRead"] = true }
                     if (updates.isNotEmpty()) {
                         FirebaseDatabase.getInstance().reference
-                            .child(stationNode).child(reportNode).child(validThreadId).child("messages")
+                            .child(stationNode).child(reportNode).child(validThreadId)
+                            .child("messages")
                             .updateChildren(updates)
                     }
                 }
 
-            // Optimistic UI update
+            // Optimistic update
             val idx = holder.bindingAdapterPosition
             if (idx != RecyclerView.NO_POSITION) {
                 responseMessageList[idx].isRead = true
@@ -161,7 +181,7 @@ class ResponseMessageAdapter(
                 onMarkedRead?.invoke()
             }
 
-            // Launch conversation screen
+            // Open response activity
             val intent = Intent(holder.itemView.context, FireReportResponseActivity::class.java).apply {
                 putExtra("UID", item.uid)
                 putExtra("FIRE_STATION_NAME", displayName)
@@ -170,6 +190,7 @@ class ResponseMessageAdapter(
                 putExtra("INCIDENT_ID", validThreadId)
                 putExtra("STATION_NODE", stationNode)
                 putExtra("REPORT_NODE", reportNode)
+                putExtra("CATEGORY", item.category) // 🔑 pass category
             }
             holder.itemView.context.startActivity(intent)
         }
@@ -198,7 +219,8 @@ class ResponseMessageAdapter(
 
     fun updateMessageIfNeeded(newMessage: ResponseMessage) {
         val existingIndex = responseMessageList.indexOfFirst {
-            it.incidentId == newMessage.incidentId && it.fireStationName == newMessage.fireStationName
+            it.incidentId == newMessage.incidentId &&
+                    it.fireStationName == newMessage.fireStationName
         }
         if (existingIndex != -1) {
             val oldTs = responseMessageList[existingIndex].timestamp ?: 0L
