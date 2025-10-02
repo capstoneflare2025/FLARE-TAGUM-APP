@@ -278,11 +278,13 @@ class FireReportResponseActivity : AppCompatActivity() {
         binding.messageInput.isEnabled = !show
         binding.cameraIcon.isEnabled = !show
         binding.galleryIcon.isEnabled = !show
+        binding.voiceRecordIcon.isEnabled = !show
         binding.sendButton.isEnabled = !show
 
         binding.messageInput.alpha = dim
         binding.cameraIcon.alpha = dim
         binding.galleryIcon.alpha = dim
+        binding.voiceRecordIcon.alpha = dim
         binding.sendButton.alpha = if (show) 0.4f else 1f
 
         binding.voiceRecordIcon.setImageResource(
@@ -421,6 +423,7 @@ class FireReportResponseActivity : AppCompatActivity() {
         // camera & gallery hidden while expanded
         binding.cameraIcon.visibility = if (expanded) View.GONE else View.VISIBLE
         binding.galleryIcon.visibility = if (expanded) View.GONE else View.VISIBLE
+        binding.voiceRecordIcon.visibility = if (expanded) View.GONE else View.VISIBLE
 
         // arrow only when expanded (and placed BEFORE the EditText)
         binding.arrowBackIcon.visibility = if (expanded) View.VISIBLE else View.GONE
@@ -438,6 +441,7 @@ class FireReportResponseActivity : AppCompatActivity() {
         // Hide or show the left-side icons
         binding.cameraIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
         binding.galleryIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
+        binding.voiceRecordIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
 
         // Optionally show/hide (or dim) the send button
         val hasText = binding.messageInput.text?.isNotBlank() == true

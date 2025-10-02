@@ -3,4 +3,6 @@
     <dimen name="profile_size">120dp</dimen>
     <dimen name="profile_padding">6dp</dimen>
 
+    <dimen name="story_edge_padding">24dp</dimen>
+    <dimen name="story_gap_between">12dp</dimen>
 </resources>

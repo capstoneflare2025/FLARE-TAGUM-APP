@@ -2,22 +2,28 @@ package com.example.flare_capstone
 
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.example.flare_capstone.databinding.ItemFireStationBinding
 import com.google.firebase.database.FirebaseDatabase
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class ResponseMessageAdapter(
-    private val responseMessageList: MutableList<ResponseMessage>
+    private val responseMessageList: MutableList<ResponseMessage>,
+    private val onMarkedRead: (() -> Unit)? = null
 ) : RecyclerView.Adapter<ResponseMessageAdapter.ResponseMessageViewHolder>() {
 
-    // Map display name -> Firebase node
+    // Fallback resolver only if stationNode is missing on the item
     private val stationNodeByDisplayName = mapOf(
-        "La Filipina Fire Station" to "LaFilipinaFireStation",
+        "LaFilipina Fire Station" to "LaFilipinaFireStation",
         "Canocotan Fire Station"   to "CanocotanFireStation",
         "Mabini Fire Station"      to "MabiniFireStation",
-        // fallback if stored as node-safe already
         "LaFilipinaFireStation"    to "LaFilipinaFireStation",
         "CanocotanFireStation"     to "CanocotanFireStation",
         "MabiniFireStation"        to "MabiniFireStation"
@@ -37,57 +43,110 @@ class ResponseMessageAdapter(
         return ResponseMessageViewHolder(binding)
     }
 
+    private val timeFmt = SimpleDateFormat("h:mm a", Locale.getDefault())
+    private fun formatTime(ts: Long?): String {
+        if (ts == null || ts <= 0L) return ""
+        val millis = if (ts < 1_000_000_000_000L) ts * 1000 else ts
+        return timeFmt.format(Date(millis))
+    }
+
     override fun onBindViewHolder(holder: ResponseMessageViewHolder, position: Int) {
         val item = responseMessageList[position]
 
         val displayName = item.fireStationName ?: "Unknown Fire Station"
-        val stationNode = stationNodeByDisplayName[displayName] ?: "MabiniFireStation"
-        val reportNode  = reportNodeByStationNode[stationNode] ?: "MabiniFireReport"
 
-        holder.binding.apply {
-            fireStationName.text = displayName
-            uid.text = "Reply: ${item.responseMessage ?: ""}"
-
-            root.setCardBackgroundColor(
-                if (item.isRead) Color.parseColor("#E87F2E") else Color.parseColor("#F5F206")
-            )
-
-            root.setOnClickListener {
-                val incidentId = item.incidentId ?: return@setOnClickListener
-
-                // Mark all messages as read
-                FirebaseDatabase.getInstance().reference
-                    .child(stationNode).child(reportNode).child(incidentId).child("messages")
-                    .get()
-                    .addOnSuccessListener { snap ->
-                        val updates = HashMap<String, Any?>()
-                        snap.children.forEach { m -> updates["${m.key}/isRead"] = true }
-                        if (updates.isNotEmpty()) {
-                            FirebaseDatabase.getInstance().reference
-                                .child(stationNode).child(reportNode).child(incidentId).child("messages")
-                                .updateChildren(updates)
-                        }
-                    }
-
-                // Update adapter item immediately
-                val idx = holder.bindingAdapterPosition
-                if (idx != RecyclerView.NO_POSITION) {
-                    responseMessageList[idx].isRead = true
-                    notifyItemChanged(idx)
-                }
-
-                // Launch chat activity
-                val intent = Intent(holder.itemView.context, FireReportResponseActivity::class.java).apply {
-                    putExtra("UID", item.uid)
-                    putExtra("FIRE_STATION_NAME", displayName)  // UI label only
-                    putExtra("CONTACT", item.contact)
-                    putExtra("NAME", item.reporterName)
-                    putExtra("INCIDENT_ID", incidentId)
-                    putExtra("STATION_NODE", stationNode)       // authoritative
-                    putExtra("REPORT_NODE", reportNode)         // authoritative
-                }
-                holder.itemView.context.startActivity(intent)
+        // Prefer the exact node coming from the item; only try to map by display name if missing
+        val stationNode = item.stationNode ?: stationNodeByDisplayName[displayName]
+        if (stationNode.isNullOrBlank()) {
+            holder.binding.root.setOnClickListener {
+                Toast.makeText(holder.itemView.context, "Unknown station for this message.", Toast.LENGTH_SHORT).show()
             }
+            bindRow(holder, displayName, item, isUnread = !item.isRead)
+            return
+        }
+
+        val reportNode = reportNodeByStationNode[stationNode]
+        if (reportNode.isNullOrBlank()) {
+            holder.binding.root.setOnClickListener {
+                Toast.makeText(holder.itemView.context, "Missing report node for $stationNode.", Toast.LENGTH_SHORT).show()
+            }
+            bindRow(holder, displayName, item, isUnread = !item.isRead)
+            return
+        }
+
+        val isUnread = !item.isRead
+        bindRow(holder, displayName, item, isUnread)
+
+        holder.binding.root.setOnClickListener {
+            // Prefer incidentId; fallback to uid (kept for older data)
+            val threadId = item.incidentId ?: item.uid
+            if (threadId.isNullOrBlank()) {
+                Toast.makeText(holder.itemView.context, "Thread id missing.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // Mark ALL messages in that thread as read
+            FirebaseDatabase.getInstance().reference
+                .child(stationNode).child(reportNode).child(threadId).child("messages")
+                .get()
+                .addOnSuccessListener { snap ->
+                    val updates = HashMap<String, Any?>()
+                    snap.children.forEach { m -> updates["${m.key}/isRead"] = true }
+                    if (updates.isNotEmpty()) {
+                        FirebaseDatabase.getInstance().reference
+                            .child(stationNode).child(reportNode).child(threadId).child("messages")
+                            .updateChildren(updates)
+                    }
+                }
+
+            // Flip current row state immediately
+            val idx = holder.bindingAdapterPosition
+            if (idx != RecyclerView.NO_POSITION) {
+                responseMessageList[idx].isRead = true
+                notifyItemChanged(idx)
+                onMarkedRead?.invoke()
+            }
+
+            // Open the correct conversation
+            val intent = Intent(holder.itemView.context, FireReportResponseActivity::class.java).apply {
+                putExtra("UID", item.uid)
+                putExtra("FIRE_STATION_NAME", displayName)
+                putExtra("CONTACT", item.contact)
+                putExtra("NAME", item.reporterName)
+                putExtra("INCIDENT_ID", threadId)     // <-- use threadId we validated
+                putExtra("STATION_NODE", stationNode) // <-- exact node
+                putExtra("REPORT_NODE", reportNode)   // <-- exact node
+            }
+            holder.itemView.context.startActivity(intent)
+        }
+    }
+
+    private fun bindRow(
+        holder: ResponseMessageViewHolder,
+        displayName: String,
+        item: ResponseMessage,
+        isUnread: Boolean
+    ) {
+        holder.binding.apply {
+            // Title
+            fireStationName.text = displayName
+            fireStationName.setTypeface(null, Typeface.BOLD)
+            fireStationName.setTextColor(Color.BLACK)
+
+            // Subtitle/snippet
+            uid.text = "Reply: ${item.responseMessage.orEmpty()}"
+            if (isUnread) {
+                uid.setTypeface(null, Typeface.BOLD)
+                uid.setTextColor(Color.BLACK)
+                unreadDot.visibility = View.VISIBLE
+            } else {
+                uid.setTypeface(null, Typeface.NORMAL)
+                uid.setTextColor(Color.parseColor("#757575"))
+                unreadDot.visibility = View.GONE
+            }
+
+            // Right timestamp
+            timestamp.text = formatTime(item.timestamp)
         }
     }
 

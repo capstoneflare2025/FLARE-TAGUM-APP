@@ -74,11 +74,13 @@
         <activity android:name=".ReportSmsActivity"/>
         <activity
             android:name=".FireReportResponseActivity"
-            android:parentActivityName=".DashboardActivity">
+            android:parentActivityName=".DashboardActivity"
+            android:launchMode="singleTop">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".DashboardActivity" />
         </activity>
+
 
         <activity android:name=".EditProfileActivity"/>
         <activity android:name=".ChangePasswordActivity"/>

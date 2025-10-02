@@ -1,56 +1,81 @@
-<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootRow"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_marginVertical="8dp"
-    android:layout_marginHorizontal="8dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="4dp">
+    android:minHeight="64dp"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <!-- Avatar (kept id) -->
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/profileIcon"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:scaleType="centerCrop"
+        android:src="@drawable/ic_logo"
+        app:shapeAppearanceOverlay="@style/CircularShape"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <!-- Timestamp (right side) -->
+    <TextView
+        android:id="@+id/timestamp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp"
-        android:gravity="center_vertical">
+        android:text="8:54 AM"
+        android:textSize="12sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/profileIcon" />
 
-        <!-- Profile Icon -->
-        <ImageView
-            android:id="@+id/profileIcon"
-            android:layout_width="55dp"
-            android:layout_height="55dp"
-            android:src="@drawable/ic_logo"
-            android:contentDescription="Profile Icon"
-            android:layout_marginEnd="12dp"
-            android:padding="6dp" />
+    <!-- Title / Name (kept id) -->
+    <TextView
+        android:id="@+id/fireStationName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Fire Station Name"
+        android:textSize="16sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="?attr/colorOnSurface"
+        app:layout_constraintStart_toEndOf="@id/profileIcon"
+        app:layout_constraintEnd_toStartOf="@id/timestamp"
+        app:layout_constraintTop_toTopOf="@id/profileIcon"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp" />
 
-        <!-- Fire Station Info -->
-        <LinearLayout
-            android:orientation="vertical"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1">
+    <!-- Subtitle / last message (kept id; repurpose as snippet) -->
+    <TextView
+        android:id="@+id/uid"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Last message"
+        android:textSize="14sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        app:layout_constraintStart_toStartOf="@id/fireStationName"
+        app:layout_constraintEnd_toStartOf="@id/unreadDot"
+        app:layout_constraintTop_toBottomOf="@id/fireStationName"
+        android:layout_marginEnd="8dp" />
 
-            <TextView
-                android:id="@+id/fireStationName"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Fire Station Name"
-                android:textColor="@android:color/black"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:ellipsize="end"
-                android:maxLines="1" />
-
-            <TextView
-                android:id="@+id/uid"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="18sp"
-                android:textColor="#757575"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
-                android:maxLines="1" />
-        </LinearLayout>
-    </LinearLayout>
-</androidx.cardview.widget.CardView>
+    <!-- Unread dot (show/hide in code) -->
+    <View
+        android:id="@+id/unreadDot"
+        android:layout_width="10dp"
+        android:layout_height="10dp"
+        android:backgroundTint="?attr/colorPrimary"
+        android:background="@drawable/bg_unread_dot"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>
