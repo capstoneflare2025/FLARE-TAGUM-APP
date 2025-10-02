@@ -798,5 +798,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             is String -> v.toDoubleOrNull() ?: 0.0
             else -> 0.0
         }
+
     }
 }
