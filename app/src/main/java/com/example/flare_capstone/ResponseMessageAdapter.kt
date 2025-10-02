@@ -9,7 +9,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.example.flare_capstone.databinding.ItemFireStationBinding
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -18,6 +18,9 @@ class ResponseMessageAdapter(
     private val responseMessageList: MutableList<ResponseMessage>,
     private val onMarkedRead: (() -> Unit)? = null
 ) : RecyclerView.Adapter<ResponseMessageAdapter.ResponseMessageViewHolder>() {
+
+    /** Cache latest preview per thread to prevent flicker on scroll */
+    private val lastPreviewByThread = mutableMapOf<String, Pair<Boolean /*fromUser*/, String /*text*/>>()
 
     // Fallback resolver only if stationNode is missing on the item
     private val stationNodeByDisplayName = mapOf(
@@ -52,54 +55,106 @@ class ResponseMessageAdapter(
 
     override fun onBindViewHolder(holder: ResponseMessageViewHolder, position: Int) {
         val item = responseMessageList[position]
-
         val displayName = item.fireStationName ?: "Unknown Fire Station"
 
-        // Prefer the exact node coming from the item; only try to map by display name if missing
         val stationNode = item.stationNode ?: stationNodeByDisplayName[displayName]
-        if (stationNode.isNullOrBlank()) {
-            holder.binding.root.setOnClickListener {
-                Toast.makeText(holder.itemView.context, "Unknown station for this message.", Toast.LENGTH_SHORT).show()
-            }
-            bindRow(holder, displayName, item, isUnread = !item.isRead)
-            return
-        }
-
-        val reportNode = reportNodeByStationNode[stationNode]
-        if (reportNode.isNullOrBlank()) {
-            holder.binding.root.setOnClickListener {
-                Toast.makeText(holder.itemView.context, "Missing report node for $stationNode.", Toast.LENGTH_SHORT).show()
-            }
-            bindRow(holder, displayName, item, isUnread = !item.isRead)
-            return
-        }
-
+        val reportNode = stationNode?.let { reportNodeByStationNode[it] }
         val isUnread = !item.isRead
-        bindRow(holder, displayName, item, isUnread)
 
+        // Bind title + timestamp first
+        holder.binding.fireStationName.apply {
+            text = displayName
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.BLACK)
+        }
+        holder.binding.timestamp.text = formatTime(item.timestamp)
+
+        // Decide the thread id we will use consistently
+        val threadId = item.incidentId ?: item.uid
+
+        // If we can’t resolve nodes or thread id, only then fall back to the legacy responseMessage
+        if (stationNode.isNullOrBlank() || reportNode.isNullOrBlank() || threadId.isNullOrBlank()) {
+            applyPreview(holder, fromUser = false, text = item.responseMessage.orEmpty(), isUnread = isUnread)
+        } else {
+            // Show cached preview immediately if available; otherwise show a gentle placeholder
+            val cached = lastPreviewByThread[threadId]
+            if (cached != null) {
+                applyPreview(holder, cached.first, cached.second, isUnread)
+            } else {
+                applyPreview(holder, fromUser = false, text = "Loading…", isUnread = isUnread)
+            }
+
+            // Tag view with threadId to avoid RecyclerView recycling issues
+            holder.itemView.tag = threadId
+
+            // Always fetch the true latest message by timestamp
+            FirebaseDatabase.getInstance().reference
+                .child(stationNode).child(reportNode).child(threadId).child("messages")
+                .orderByChild("timestamp")
+                .limitToLast(1)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        // Ensure still bound to same thread
+                        if (holder.bindingAdapterPosition == RecyclerView.NO_POSITION) return
+                        if (holder.itemView.tag != threadId) return
+
+                        var text = ""
+                        var fromUser = false
+
+                        // Adjust these field names if your schema differs:
+                        // Expected:
+                        //   text: String
+                        //   from: "user"|"reporter"|"station"
+                        //   OR sender: "user"/"station"
+                        val msg = snapshot.children.firstOrNull()
+                        if (msg != null) {
+                            text = msg.child("text").getValue(String::class.java)
+                                ?: msg.child("message").getValue(String::class.java)
+                                        ?: ""
+                            val from = (msg.child("from").getValue(String::class.java)
+                                ?: msg.child("sender").getValue(String::class.java)
+                                ?: "").lowercase(Locale.getDefault())
+                            fromUser = from == "user" || from == "reporter" || from == "you"
+                        }
+
+                        // Update cache and UI
+                        lastPreviewByThread[threadId] = fromUser to text
+                        applyPreview(holder, fromUser, text, isUnread)
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        // If read fails, we don’t blow up the row; keep any cache/placeholder
+                    }
+                })
+        }
+
+        // Click: mark read + open
         holder.binding.root.setOnClickListener {
-            // Prefer incidentId; fallback to uid (kept for older data)
-            val threadId = item.incidentId ?: item.uid
-            if (threadId.isNullOrBlank()) {
+            val validThreadId = threadId
+            if (validThreadId.isNullOrBlank()) {
                 Toast.makeText(holder.itemView.context, "Thread id missing.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            if (stationNode.isNullOrBlank() || reportNode.isNullOrBlank()) {
+                Toast.makeText(holder.itemView.context, "Missing station/report node.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
-            // Mark ALL messages in that thread as read
+            // Mark all messages in thread as read
             FirebaseDatabase.getInstance().reference
-                .child(stationNode).child(reportNode).child(threadId).child("messages")
+                .child(stationNode).child(reportNode).child(validThreadId).child("messages")
                 .get()
                 .addOnSuccessListener { snap ->
                     val updates = HashMap<String, Any?>()
                     snap.children.forEach { m -> updates["${m.key}/isRead"] = true }
                     if (updates.isNotEmpty()) {
                         FirebaseDatabase.getInstance().reference
-                            .child(stationNode).child(reportNode).child(threadId).child("messages")
+                            .child(stationNode).child(reportNode).child(validThreadId).child("messages")
                             .updateChildren(updates)
                     }
                 }
 
-            // Flip current row state immediately
+            // Optimistic UI
             val idx = holder.bindingAdapterPosition
             if (idx != RecyclerView.NO_POSITION) {
                 responseMessageList[idx].isRead = true
@@ -107,46 +162,38 @@ class ResponseMessageAdapter(
                 onMarkedRead?.invoke()
             }
 
-            // Open the correct conversation
+            // Launch thread
             val intent = Intent(holder.itemView.context, FireReportResponseActivity::class.java).apply {
                 putExtra("UID", item.uid)
                 putExtra("FIRE_STATION_NAME", displayName)
                 putExtra("CONTACT", item.contact)
                 putExtra("NAME", item.reporterName)
-                putExtra("INCIDENT_ID", threadId)     // <-- use threadId we validated
-                putExtra("STATION_NODE", stationNode) // <-- exact node
-                putExtra("REPORT_NODE", reportNode)   // <-- exact node
+                putExtra("INCIDENT_ID", validThreadId)
+                putExtra("STATION_NODE", stationNode)
+                putExtra("REPORT_NODE", reportNode)
             }
             holder.itemView.context.startActivity(intent)
         }
     }
 
-    private fun bindRow(
+    /** Apply subtitle + unread visuals */
+    private fun applyPreview(
         holder: ResponseMessageViewHolder,
-        displayName: String,
-        item: ResponseMessage,
+        fromUser: Boolean,
+        text: String,
         isUnread: Boolean
     ) {
-        holder.binding.apply {
-            // Title
-            fireStationName.text = displayName
-            fireStationName.setTypeface(null, Typeface.BOLD)
-            fireStationName.setTextColor(Color.BLACK)
+        val prefix = if (fromUser) "You: " else "Reply: "
+        holder.binding.uid.text = prefix + text
 
-            // Subtitle/snippet
-            uid.text = "Reply: ${item.responseMessage.orEmpty()}"
-            if (isUnread) {
-                uid.setTypeface(null, Typeface.BOLD)
-                uid.setTextColor(Color.BLACK)
-                unreadDot.visibility = View.VISIBLE
-            } else {
-                uid.setTypeface(null, Typeface.NORMAL)
-                uid.setTextColor(Color.parseColor("#757575"))
-                unreadDot.visibility = View.GONE
-            }
-
-            // Right timestamp
-            timestamp.text = formatTime(item.timestamp)
+        if (isUnread) {
+            holder.binding.uid.setTypeface(null, Typeface.BOLD)
+            holder.binding.uid.setTextColor(Color.BLACK)
+            holder.binding.unreadDot.visibility = View.VISIBLE
+        } else {
+            holder.binding.uid.setTypeface(null, Typeface.NORMAL)
+            holder.binding.uid.setTextColor(Color.parseColor("#757575"))
+            holder.binding.unreadDot.visibility = View.GONE
         }
     }
 
