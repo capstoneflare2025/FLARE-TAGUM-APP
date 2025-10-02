@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
@@ -61,7 +60,7 @@ class ResponseMessageAdapter(
         val reportNode = stationNode?.let { reportNodeByStationNode[it] }
         val isUnread = !item.isRead
 
-        // Bind title + timestamp first
+        // Title + time
         holder.binding.fireStationName.apply {
             text = displayName
             setTypeface(null, Typeface.BOLD)
@@ -69,14 +68,14 @@ class ResponseMessageAdapter(
         }
         holder.binding.timestamp.text = formatTime(item.timestamp)
 
-        // Decide the thread id we will use consistently
+        // Consistent thread id
         val threadId = item.incidentId ?: item.uid
 
-        // If we can’t resolve nodes or thread id, only then fall back to the legacy responseMessage
+        // If we can’t resolve nodes or thread id, fallback to legacy responseMessage text
         if (stationNode.isNullOrBlank() || reportNode.isNullOrBlank() || threadId.isNullOrBlank()) {
             applyPreview(holder, fromUser = false, text = item.responseMessage.orEmpty(), isUnread = isUnread)
         } else {
-            // Show cached preview immediately if available; otherwise show a gentle placeholder
+            // Use cache immediately to avoid flicker
             val cached = lastPreviewByThread[threadId]
             if (cached != null) {
                 applyPreview(holder, cached.first, cached.second, isUnread)
@@ -84,7 +83,7 @@ class ResponseMessageAdapter(
                 applyPreview(holder, fromUser = false, text = "Loading…", isUnread = isUnread)
             }
 
-            // Tag view with threadId to avoid RecyclerView recycling issues
+            // Tag view with threadId to guard against recycling
             holder.itemView.tag = threadId
 
             // Always fetch the true latest message by timestamp
@@ -101,34 +100,34 @@ class ResponseMessageAdapter(
                         var text = ""
                         var fromUser = false
 
-                        // Adjust these field names if your schema differs:
-                        // Expected:
-                        //   text: String
-                        //   from: "user"|"reporter"|"station"
-                        //   OR sender: "user"/"station"
                         val msg = snapshot.children.firstOrNull()
                         if (msg != null) {
+                            // Text/body: support common field names
                             text = msg.child("text").getValue(String::class.java)
                                 ?: msg.child("message").getValue(String::class.java)
+                                        ?: msg.child("body").getValue(String::class.java)
                                         ?: ""
-                            val from = (msg.child("from").getValue(String::class.java)
-                                ?: msg.child("sender").getValue(String::class.java)
-                                ?: "").lowercase(Locale.getDefault())
-                            fromUser = from == "user" || from == "reporter" || from == "you"
+
+                            // Use TYPE to decide prefix
+                            // type == "reply" -> from user; type == "response" -> from station
+                            val type = msg.child("type").getValue(String::class.java)
+                                ?.trim()?.lowercase(Locale.getDefault())
+                            fromUser = type == "reply" // reporter/user message
+                            // if "response", fromUser remains false (station)
                         }
 
-                        // Update cache and UI
+                        // Update cache + UI
                         lastPreviewByThread[threadId] = fromUser to text
                         applyPreview(holder, fromUser, text, isUnread)
                     }
 
                     override fun onCancelled(error: DatabaseError) {
-                        // If read fails, we don’t blow up the row; keep any cache/placeholder
+                        // Keep placeholder/cache on error
                     }
                 })
         }
 
-        // Click: mark read + open
+        // Click: mark read + open thread
         holder.binding.root.setOnClickListener {
             val validThreadId = threadId
             if (validThreadId.isNullOrBlank()) {
@@ -154,7 +153,7 @@ class ResponseMessageAdapter(
                     }
                 }
 
-            // Optimistic UI
+            // Optimistic UI update
             val idx = holder.bindingAdapterPosition
             if (idx != RecyclerView.NO_POSITION) {
                 responseMessageList[idx].isRead = true
@@ -162,7 +161,7 @@ class ResponseMessageAdapter(
                 onMarkedRead?.invoke()
             }
 
-            // Launch thread
+            // Launch conversation screen
             val intent = Intent(holder.itemView.context, FireReportResponseActivity::class.java).apply {
                 putExtra("UID", item.uid)
                 putExtra("FIRE_STATION_NAME", displayName)
@@ -189,11 +188,11 @@ class ResponseMessageAdapter(
         if (isUnread) {
             holder.binding.uid.setTypeface(null, Typeface.BOLD)
             holder.binding.uid.setTextColor(Color.BLACK)
-            holder.binding.unreadDot.visibility = View.VISIBLE
+            holder.binding.unreadDot.visibility = android.view.View.VISIBLE
         } else {
             holder.binding.uid.setTypeface(null, Typeface.NORMAL)
             holder.binding.uid.setTextColor(Color.parseColor("#757575"))
-            holder.binding.unreadDot.visibility = View.GONE
+            holder.binding.unreadDot.visibility = android.view.View.GONE
         }
     }
 

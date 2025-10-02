@@ -10,7 +10,6 @@ import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.telephony.SmsManager
 import android.util.Log
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
@@ -21,6 +20,7 @@ import androidx.core.content.ContextCompat
 import com.example.flare_capstone.databinding.ActivityOtherEmergencyBinding
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.android.material.card.MaterialCardView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import java.text.SimpleDateFormat
@@ -216,7 +216,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
         }
     }
 
-    private fun resetButtonAppearance(button: LinearLayout) { button.alpha = 1.0f }
+    private fun resetButtonAppearance(button: MaterialCardView) { button.alpha = 1.0f }
 
     private fun updateEmergencyText(text: String) {
         binding.title.text = text

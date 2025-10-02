@@ -122,8 +122,8 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
     private val STATION_W_DP: Int? = 25
     private val STATION_H_DP: Int? = 30
-    private val USER_W_DP:   Int? = 25
-    private val USER_H_DP:   Int? = 30
+    private val USER_W_DP:   Int? = 30
+    private val USER_H_DP:   Int? = 35
 
     private val stationProfileKey = mapOf(
         "CanocotanFireStation" to "CanocotanProfile",

@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.gridlayout)
     testImplementation(libs.junit)
     implementation(libs.firebase.database) // Regular Firebase Database SDK (no KTX)
     androidTestImplementation(libs.androidx.junit)
