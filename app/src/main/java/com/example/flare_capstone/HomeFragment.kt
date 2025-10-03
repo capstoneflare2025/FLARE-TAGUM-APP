@@ -7,6 +7,7 @@ package com.example.flare_capstone
  * - Single active route with proper toggle (tap again to hide)
  * - Prevents duplicate/stale routes via request generation guard
  * - Robust resets so it works after returning to this Fragment
+ * - NEW: Tagum geofence for Fire/Other buttons (toast + block)
  * ========================================================= */
 
 import android.Manifest
@@ -140,6 +141,18 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
+    /* ---------------- Tagum Geo-fence (center + radius) ---------------- */
+    private val TAGUM_CENTER_LAT = 7.447725
+    private val TAGUM_CENTER_LON = 125.804150
+    private val TAGUM_RADIUS_METERS = 11_000.0 // ~11 km
+
+    /** Returns true if current user location is within Tagum radius */
+    private fun isInsideTagum(): Boolean {
+        if (userLatitude == 0.0 && userLongitude == 0.0) return false
+        val meters = distanceKm(userLatitude, userLongitude, TAGUM_CENTER_LAT, TAGUM_CENTER_LON) * 1000.0
+        return meters <= TAGUM_RADIUS_METERS
+    }
+
     /* ---------------- Permissions ---------------- */
     private val locationPermsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -182,11 +195,28 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         // Load stations
         fetchFireStationLocations()
 
-        // Buttons
+        // ---------------- Button handlers with Tagum gate ----------------
         binding.fireButton.setOnClickListener {
+            if (userLatitude == 0.0 && userLongitude == 0.0) {
+                postToast("Getting your location…")
+                return@setOnClickListener
+            }
+            if (!isInsideTagum()) {
+                postToast("You can’t submit a report outside Tagum.")
+                return@setOnClickListener
+            }
             startActivity(Intent(requireActivity(), FireLevelActivity::class.java))
         }
+
         binding.otherButton.setOnClickListener {
+            if (userLatitude == 0.0 && userLongitude == 0.0) {
+                postToast("Getting your location…")
+                return@setOnClickListener
+            }
+            if (!isInsideTagum()) {
+                postToast("You can’t submit a report outside Tagum.")
+                return@setOnClickListener
+            }
             startActivity(Intent(requireActivity(), OtherEmergencyActivity::class.java))
         }
 
@@ -202,7 +232,15 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         nav?.setNavigationItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> { /* already here */ }
-                R.id.nav_report_fire -> startActivity(Intent(requireContext(), FireLevelActivity::class.java))
+                R.id.nav_report_fire -> {
+                    if (userLatitude == 0.0 && userLongitude == 0.0) {
+                        postToast("Getting your location…")
+                    } else if (!isInsideTagum()) {
+                        postToast("You can’t submit a report outside Tagum.")
+                    } else {
+                        startActivity(Intent(requireContext(), FireLevelActivity::class.java))
+                    }
+                }
                 R.id.nav_my_reports -> startActivity(Intent(requireContext(), MyReportActivity::class.java))
                 R.id.nav_logout -> { /* TODO */ }
             }
@@ -619,7 +657,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // (Removed bounds fit — we center on user instead)
         // Optional: refresh active route as you move, but ensure guard stops duplicates
         selectedStationTitle?.let { title ->
             val dest = getStationLatLngByTitle(title)
