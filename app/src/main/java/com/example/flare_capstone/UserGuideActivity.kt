@@ -12,22 +12,16 @@ import com.example.flare_capstone.databinding.ActivityUserGuideBinding
 class UserGuideActivity: AppCompatActivity() {
 
     private lateinit var binding: ActivityUserGuideBinding
-
     private lateinit var connectivityManager: ConnectivityManager
-
     private var loadingDialog: AlertDialog? = null
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            runOnUiThread {
-                hideLoadingDialog()
-            }
+            runOnUiThread { hideLoadingDialog() }
         }
 
         override fun onLost(network: Network) {
-            runOnUiThread {
-                showLoadingDialog("No internet connection")
-            }
+            runOnUiThread { showLoadingDialog("No internet connection") }
         }
     }
 
@@ -39,21 +33,29 @@ class UserGuideActivity: AppCompatActivity() {
 
         connectivityManager = getSystemService(ConnectivityManager::class.java)
 
-        // Check initial connection
         if (!isConnected()) {
             showLoadingDialog("No internet connection")
         } else {
             hideLoadingDialog()
         }
 
-        // Register network callback
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
+        binding.back.setOnClickListener { onBackPressed() }
 
-        binding.back.setOnClickListener {
-            onBackPressed()
+        // 🔥 Show fire tutorial dialog
+        binding.reportFireCard.setOnClickListener {
+            VideoDialogFragment
+                .newInstance("Tutorial Report Fire", R.raw.tutorial_report_fire)
+                .show(supportFragmentManager, "video_fire")
         }
 
+        // 🚨 Show other emergency tutorial dialog
+        binding.reportOtherCard.setOnClickListener {
+            VideoDialogFragment
+                .newInstance("Tutorial Report Other", R.raw.tutorial_report_other)
+                .show(supportFragmentManager, "video_other")
+        }
     }
 
     private fun isConnected(): Boolean {
@@ -66,13 +68,13 @@ class UserGuideActivity: AppCompatActivity() {
         if (loadingDialog == null) {
             val builder = AlertDialog.Builder(this)
             val inflater = layoutInflater
-            val dialogView = inflater.inflate(com.example.flare_capstone.R.layout.custom_loading_dialog, null)
+            val dialogView = inflater.inflate(R.layout.custom_loading_dialog, null)
             builder.setView(dialogView)
             builder.setCancelable(false)
             loadingDialog = builder.create()
         }
         loadingDialog?.show()
-        loadingDialog?.findViewById<TextView>(com.example.flare_capstone.R.id.loading_message)?.text = message
+        loadingDialog?.findViewById<TextView>(R.id.loading_message)?.text = message
     }
 
     private fun hideLoadingDialog() {
@@ -83,6 +85,4 @@ class UserGuideActivity: AppCompatActivity() {
         super.onDestroy()
         connectivityManager.unregisterNetworkCallback(networkCallback)
     }
-
-
 }

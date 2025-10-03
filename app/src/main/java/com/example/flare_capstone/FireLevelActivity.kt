@@ -116,7 +116,8 @@ class FireLevelActivity : AppCompatActivity() {
             startActivity(Intent(this, DashboardActivity::class.java))
             finish()
         }
-        binding.sendButton.setOnClickListener { checkAndSendAlertReport() }
+        binding.sendButton.setOnClickListener { showSendConfirmationDialog() }
+
 
         // FCM topic
         FirebaseMessaging.getInstance().subscribeToTopic("all")
@@ -290,6 +291,71 @@ class FireLevelActivity : AppCompatActivity() {
             }
             .addOnFailureListener { onDone(null) }
     }
+
+    private fun showSendConfirmationDialog() {
+        // Gather inputs
+        val fireStartTime = getFormattedTime()
+        val affectedHousesStr = binding.housesAffectedInput.text?.toString()?.trim().orEmpty()
+
+        // Basic validation before we even show the dialog
+        if (affectedHousesStr.isEmpty()) {
+            Toast.makeText(this, "Please enter number of houses affected.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val affectedHouses = affectedHousesStr.toIntOrNull()
+        if (affectedHouses == null || affectedHouses < 0) {
+            Toast.makeText(this, "Please enter a valid number of houses.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Compute alert level (same logic used in sendAlertReport)
+        val alertLevel = when {
+            affectedHouses >= 2 -> "2nd alarm"
+            affectedHouses == 1 -> "1st alarm"
+            else -> "Unknown alarm"
+        }
+
+        // Address (or fallback to coordinates if address not yet resolved)
+        val addr = when {
+            !readableAddress.isNullOrBlank() -> readableAddress!!.trim()
+            latitude != 0.0 || longitude != 0.0 -> "GPS: $latitude, $longitude"
+            else -> "Not available yet"
+        }
+
+        // Current date-time for user clarity (this is not the reportTime you compute later)
+        val now = Date(System.currentTimeMillis())
+        val dateStr = SimpleDateFormat("MM/dd/yyyy", Locale.getDefault()).format(now)
+        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(now)
+
+        // Build a readable summary
+        val message = buildString {
+            appendLine("Please confirm the details below:")
+            appendLine()
+            appendLine("• Date: $dateStr")
+            appendLine()
+            appendLine("• Time: $timeStr")
+            appendLine()
+            appendLine("• Fire Start Time: $fireStartTime")
+            appendLine()
+            appendLine("• Houses Affected: $affectedHousesStr")
+            appendLine()
+            appendLine("• Alert Level: $alertLevel")
+            appendLine()
+            appendLine("• Location: $addr")
+        }
+
+        // Show dialog
+        AlertDialog.Builder(this)
+            .setTitle("Confirm Fire Report")
+            .setMessage(message)
+            .setPositiveButton("Submit") { _, _ ->
+                // Proceed with your existing flow
+                checkAndSendAlertReport()
+            }
+            .setNegativeButton("Edit", null)
+            .show()
+    }
+
 
     private fun sendAlertReport(currentTime: Long) {
         val fireStartTime = getFormattedTime()

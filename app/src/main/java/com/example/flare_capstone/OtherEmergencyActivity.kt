@@ -114,12 +114,13 @@ class OtherEmergencyActivity : AppCompatActivity() {
         binding.sendButton.setOnClickListener {
             val now = System.currentTimeMillis()
             if (now - lastReportTime >= 5 * 60 * 1000) {
-                sendEmergencyReport(now)
+                showSendConfirmationDialog(now)
             } else {
                 val wait = (5 * 60 * 1000 - (now - lastReportTime)) / 1000
                 Toast.makeText(this, "Please wait $wait seconds before submitting again.", Toast.LENGTH_LONG).show()
             }
         }
+
 
         // Optional: ask for SMS permission proactively (since we send notifications)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -289,6 +290,52 @@ class OtherEmergencyActivity : AppCompatActivity() {
             }
             .addOnFailureListener { onDone(null) }
     }
+
+    private fun showSendConfirmationDialog(currentTime: Long) {
+        // Guard rails
+        if (!tagumOk) {
+            Toast.makeText(this, "Reporting is allowed only within Tagum.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val type = selectedEmergency
+        if (type.isNullOrBlank()) {
+            Toast.makeText(this, "Please select an emergency type.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Build user-facing summary
+        val dateStr = SimpleDateFormat("MM/dd/yy", Locale.getDefault()).format(Date(currentTime))
+        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(currentTime))
+        val addr = exactLocation.ifBlank {
+            if (latitude != 0.0 || longitude != 0.0)
+                "Within Tagum vicinity – https://www.google.com/maps?q=$latitude,$longitude"
+            else
+                "Not available yet"
+        }
+
+        val message = buildString {
+            appendLine("Please confirm the details below:")
+            appendLine()
+            appendLine("• Type: $type")
+            appendLine()
+            appendLine("• Date: $dateStr")
+            appendLine()
+            appendLine("• Time: $timeStr")
+            appendLine()
+            appendLine("• Location: $addr")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Confirm Emergency Report")
+            .setMessage(message)
+            .setPositiveButton("Submit") { _, _ ->
+                // Proceed with your existing flow
+                sendEmergencyReport(currentTime)
+            }
+            .setNegativeButton("Edit", null)
+            .show()
+    }
+
 
     // ---- Submit report (routes to nearest station) ----
     private fun sendEmergencyReport(currentTime: Long) {
