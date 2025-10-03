@@ -102,7 +102,6 @@
         android:insetTop="0dp"
         android:insetBottom="0dp"
         app:cornerRadius="28dp"
-        app:icon="@drawable/ic_arrow_right_24"
         app:iconGravity="textEnd"
         app:iconPadding="8dp"
         android:backgroundTint="#E00024"

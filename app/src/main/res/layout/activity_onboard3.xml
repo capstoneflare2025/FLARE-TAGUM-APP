@@ -146,7 +146,6 @@
         android:textAllCaps="false"
         android:textSize="18sp"
         app:cornerRadius="28dp"
-        app:icon="@drawable/ic_arrow_right_24"
         app:iconGravity="textEnd"
         app:iconPadding="8dp"
         android:backgroundTint="#E00024"
