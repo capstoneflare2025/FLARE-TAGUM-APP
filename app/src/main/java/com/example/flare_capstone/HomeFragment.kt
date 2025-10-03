@@ -2,9 +2,11 @@ package com.example.flare_capstone
 
 /* =========================================================
  * HomeFragment.kt (OSRM • draw route only on station tap)
+ * - Default camera: Philippines until we have a fix
+ * - Auto-center on user at city zoom when a fix arrives
  * - Single active route with proper toggle (tap again to hide)
  * - Prevents duplicate/stale routes via request generation guard
- * - Fixed getStationLatLngByTitle copy/paste bug
+ * - Robust resets so it works after returning to this Fragment
  * ========================================================= */
 
 import android.Manifest
@@ -125,6 +127,11 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     private val USER_W_DP:   Int? = 30
     private val USER_H_DP:   Int? = 35
 
+    // Philippines default view + zoom levels
+    private val DEFAULT_CENTER_PH = LatLng(12.8797, 121.7740)
+    private val DEFAULT_ZOOM_COUNTRY = 5.8f
+    private val DEFAULT_ZOOM_CITY = 14f
+
     private val stationProfileKey = mapOf(
         "CanocotanFireStation" to "CanocotanProfile",
         "LaFilipinaFireStation" to "LaFilipinaProfile",
@@ -142,6 +149,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         if (fine || coarse) {
             enableMyLocationSafely()
             startLocationUpdates()
+            primeLocationOnce()
         } else {
             context?.let { Toast.makeText(it, "Location permission denied", Toast.LENGTH_SHORT).show() }
         }
@@ -162,7 +170,14 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
         auth = FirebaseAuth.getInstance()
 
-        (childFragmentManager.findFragmentById(R.id.map) as? SupportMapFragment)?.getMapAsync(this)
+        // Ensure a live map fragment is attached
+        val mapFrag = (childFragmentManager.findFragmentById(R.id.map) as? SupportMapFragment)
+            ?: SupportMapFragment.newInstance().also {
+                childFragmentManager.beginTransaction()
+                    .replace(R.id.map, it, "home_map")
+                    .commitNow()
+            }
+        mapFrag.getMapAsync(this)
 
         // Load stations
         fetchFireStationLocations()
@@ -208,10 +223,12 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
     override fun onResume() {
         super.onResume()
-        if (mapReady && hasLocationPermission()) {
+        if (hasLocationPermission()) {
             enableMyLocationSafely()
             startLocationUpdates()
-            primeLocationOnce() // <— add this line
+            primeLocationOnce()
+        } else {
+            requestLocationPerms()
         }
     }
 
@@ -225,9 +242,25 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
         // Clean map items
         activePolyline?.remove(); activePolyline = null
+        activeDistanceMeters = null
+        activeDurationSec = null
+        selectedStationTitle = null
+
         stationMarkers.values.forEach { it.remove() }
         stationMarkers.clear()
         userMarker = null
+
+        // Reset state so returning works consistently
+        mapReady = false
+        cameraFittedOnce = false
+        lastUpdateMs = 0L
+        lastUpdateLat = 0.0
+        lastUpdateLng = 0.0
+        userLatitude = 0.0
+        userLongitude = 0.0
+
+        // cancel any in-flight OSRM response
+        routeRequestSeq.incrementAndGet()
 
         _binding = null
     }
@@ -241,6 +274,14 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
         map.uiSettings.isZoomControlsEnabled = false
         map.uiSettings.isMapToolbarEnabled = false
+        map.uiSettings.isMyLocationButtonEnabled = true  // handy recenter button
+
+        // Default to Philippines until we have a fix
+        map.setOnMapLoadedCallback {
+            if (userLatitude == 0.0 && userLongitude == 0.0 && !cameraFittedOnce) {
+                zoomToPhilippines(move = true)
+            }
+        }
 
         // Tap a station to draw/hide its (shortest) route (toggle) with race-guard
         map.setOnMarkerClickListener { marker ->
@@ -300,7 +341,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         if (hasLocationPermission()) {
             enableMyLocationSafely()
             startLocationUpdates()
-            primeLocationOnce() // NEW
+            primeLocationOnce()
         } else {
             requestLocationPerms()
         }
@@ -513,6 +554,16 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
     private fun updateMapIfReady() {
         if (!mapReady) return
+
+        // We can center on user even if stations haven't loaded yet
+        if (userLatitude != 0.0 || userLongitude != 0.0) {
+            if (!cameraFittedOnce) {
+                centerOnUser(animated = true, zoom = DEFAULT_ZOOM_CITY)
+                cameraFittedOnce = true
+            }
+        }
+
+        // Wait for stations before placing their markers
         if (!(canocotanFetched && laFilipinaFetched && mabiniFetched)) return
         if (userLatitude == 0.0 || userLongitude == 0.0) return
         if (!shouldUpdate(userLatitude, userLongitude)) return
@@ -568,23 +619,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // fit camera once
-        if (!cameraFittedOnce && _binding != null) {
-            binding.root.viewTreeObserver.addOnGlobalLayoutListener(object :
-                ViewTreeObserver.OnGlobalLayoutListener {
-                override fun onGlobalLayout() {
-                    if (_binding == null) return
-                    binding.root.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                    val b = LatLngBounds.Builder().apply {
-                        include(user)
-                        stations.forEach { (_, lat, lng) -> include(LatLng(lat, lng)) }
-                    }.build()
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(b, 200))
-                    cameraFittedOnce = true
-                }
-            })
-        }
-
+        // (Removed bounds fit — we center on user instead)
         // Optional: refresh active route as you move, but ensure guard stops duplicates
         selectedStationTitle?.let { title ->
             val dest = getStationLatLngByTitle(title)
@@ -800,9 +835,27 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             is String -> v.toDoubleOrNull() ?: 0.0
             else -> 0.0
         }
-
     }
 
+    /* =========================================================
+     * Camera helpers
+     * ========================================================= */
+    private fun zoomToPhilippines(move: Boolean = true) {
+        if (!mapReady) return
+        val cu = CameraUpdateFactory.newLatLngZoom(DEFAULT_CENTER_PH, DEFAULT_ZOOM_COUNTRY)
+        if (move) map.moveCamera(cu) else map.animateCamera(cu)
+    }
+
+    private fun centerOnUser(animated: Boolean = true, zoom: Float = DEFAULT_ZOOM_CITY) {
+        if (!mapReady) return
+        if (userLatitude == 0.0 && userLongitude == 0.0) return
+        val cu = CameraUpdateFactory.newLatLngZoom(LatLng(userLatitude, userLongitude), zoom)
+        if (animated) map.animateCamera(cu) else map.moveCamera(cu)
+    }
+
+    /* =========================================================
+     * Location seeding
+     * ========================================================= */
     @SuppressLint("MissingPermission")
     private fun primeLocationOnce() {
         if (!hasLocationPermission()) return
@@ -812,8 +865,11 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
                 if (loc != null) {
                     userLatitude = loc.latitude
                     userLongitude = loc.longitude
-                    // draw immediately with whatever we have
                     updateMapIfReady()
+                    if (!cameraFittedOnce) {
+                        centerOnUser(animated = true)
+                        cameraFittedOnce = true
+                    }
                 } else {
                     // 2) Fallback: single current fix (one-shot)
                     val cts = com.google.android.gms.tasks.CancellationTokenSource()
@@ -823,12 +879,16 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
                                 userLatitude = fresh.latitude
                                 userLongitude = fresh.longitude
                                 updateMapIfReady()
+                                if (!cameraFittedOnce) {
+                                    centerOnUser(animated = true)
+                                    cameraFittedOnce = true
+                                }
+                            } else {
+                                // 3) As a last resort, continuous updates will deliver a first fix
+                                startLocationUpdates()
                             }
                         }
                 }
             }
     }
-
-
-
 }
