@@ -7,6 +7,9 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -14,11 +17,9 @@ import android.widget.TextView
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.TaskStackBuilder
-import androidx.fragment.app.Fragment
 import androidx.core.content.ContextCompat
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
@@ -26,9 +27,6 @@ import com.example.flare_capstone.databinding.ActivityDashboardBinding
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
 
 class DashboardActivity : AppCompatActivity() {
 
@@ -50,10 +48,40 @@ class DashboardActivity : AppCompatActivity() {
     private val stationNodes = listOf("LaFilipinaFireStation", "CanocotanFireStation", "MabiniFireStation")
     private val responseListeners = mutableListOf<Pair<Query, ChildEventListener>>()
 
+    /* ---------------- Connectivity state gates ---------------- */
+    private var isNetworkValidated = false
+    private var isNetworkSlow = true          // assume slow until measured
+    private var isInitialFirebaseReady = false
+
+    private val unreadCounterListeners = mutableListOf<Pair<Query, ValueEventListener>>()
+
+
     /* ---------------- Network Callback ---------------- */
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) { runOnUiThread { hideLoadingDialog() } }
-        override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
+        override fun onAvailable(network: Network) {
+            runOnUiThread {
+                // Network appeared; wait for validation and speed check.
+                isNetworkValidated = false
+                isNetworkSlow = true
+                showLoadingDialog("Connecting… (waiting for internet)")
+            }
+        }
+
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+            runOnUiThread {
+                isNetworkValidated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                isNetworkSlow = isSlow(caps)
+                maybeHideLoading()
+            }
+        }
+
+        override fun onLost(network: Network) {
+            runOnUiThread {
+                isNetworkValidated = false
+                isNetworkSlow = true
+                showLoadingDialog("No internet connection")
+            }
+        }
     }
 
     /* =========================================================
@@ -67,9 +95,17 @@ class DashboardActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         connectivityManager = getSystemService(ConnectivityManager::class.java)
-        if (!isConnected()) showLoadingDialog("No internet connection") else hideLoadingDialog()
+
+        // Initial UI state depending on connectivity
+        if (!isConnected()) {
+            showLoadingDialog("No internet connection")
+        } else {
+            showLoadingDialog("Connecting…")
+        }
+        // Listen for ongoing connectivity changes
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
+        // Keep dialog up until all gates pass
         showLoadingDialog()
 
         sharedPreferences = getSharedPreferences("shown_notifications", MODE_PRIVATE)
@@ -84,21 +120,37 @@ class DashboardActivity : AppCompatActivity() {
             }
         }
 
-        val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
+        val navHostFragment =
+            supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
         binding.bottomNavigation.setupWithNavController(navController)
 
         createNotificationChannel()
 
+        // ---- Firebase bootstrap; only mark ready after we finish initial wiring ----
         fetchCurrentUserName { name ->
             if (name != null) {
                 currentUserName = name
                 updateUnreadMessageCount()
+                startRealtimeUnreadCounter()
                 listenForResponseMessages()
+                listenForStatusChanges()
             } else {
+                startRealtimeUnreadCounter()
                 Log.e("UserCheck", "Failed to get current user name. Notifications will not be triggered.")
             }
+
+            // Mark the initial Firebase setup as complete (even if name is null; we've attempted it)
+            isInitialFirebaseReady = true
+            runOnUiThread { maybeHideLoading() }
         }
+
+        // If Firebase is taking long (likely slow internet), keep user informed
+        binding.root.postDelayed({
+            if (!isInitialFirebaseReady) {
+                showLoadingDialog("Still loading data… (slow internet)")
+            }
+        }, 10_000)
     }
 
     override fun onResume() {
@@ -106,22 +158,48 @@ class DashboardActivity : AppCompatActivity() {
         if (::database.isInitialized && user != null) {
             updateUnreadMessageCount()
         }
+        maybeHideLoading()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         try { connectivityManager.unregisterNetworkCallback(networkCallback) } catch (_: Exception) {}
-        responseListeners.forEach { (query, listener) -> try { query.removeEventListener(listener) } catch (_: Exception) {} }
+        responseListeners.forEach { (query, listener) ->
+            try { query.removeEventListener(listener) } catch (_: Exception) {}
+        }
         responseListeners.clear()
+        stopRealtimeUnreadCounter()
     }
 
     /* =========================================================
-     * Connectivity / Loading
+     * Connectivity / Loading helpers
      * ========================================================= */
     private fun isConnected(): Boolean {
         val activeNetwork = connectivityManager.activeNetwork ?: return false
         val caps = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun isSlow(caps: NetworkCapabilities): Boolean {
+        // Heuristic: treat < 1.5 Mbps down OR < 512 Kbps up as slow.
+        val down = caps.linkDownstreamBandwidthKbps
+        val up = caps.linkUpstreamBandwidthKbps
+        if (down <= 0 || up <= 0) return true // unknown -> be conservative
+        return down < 1500 || up < 512
+    }
+
+    private fun maybeHideLoading() {
+        if (isNetworkValidated && !isNetworkSlow && isInitialFirebaseReady) {
+            hideLoadingDialog()
+        } else {
+            val msg = when {
+                !isNetworkValidated -> "Connecting… (waiting for internet)"
+                isNetworkSlow -> "Slow internet connection"
+                !isInitialFirebaseReady -> "Loading data…"
+                else -> "Please wait"
+            }
+            showLoadingDialog(msg)
+        }
     }
 
     private fun showLoadingDialog(message: String = "Please wait if internet is slow") {
@@ -132,7 +210,7 @@ class DashboardActivity : AppCompatActivity() {
             builder.setCancelable(false)
             loadingDialog = builder.create()
         }
-        loadingDialog?.show()
+        if (loadingDialog?.isShowing != true) loadingDialog?.show()
         loadingDialog?.findViewById<TextView>(R.id.loading_message)?.text = message
     }
 
@@ -145,7 +223,11 @@ class DashboardActivity : AppCompatActivity() {
      * ========================================================= */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("default_channel", "General Notifications", NotificationManager.IMPORTANCE_HIGH)
+            val channel = NotificationChannel(
+                "default_channel",
+                "General Notifications",
+                NotificationManager.IMPORTANCE_HIGH
+            )
             val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
@@ -386,7 +468,7 @@ class DashboardActivity : AppCompatActivity() {
                     val status = snapshot.child("status").getValue(String::class.java)
 
                     if (reporterName == myName && status == "Ongoing") {
-                        triggerStatusChangeNotification(reportId, stationNode, reporterName, status)
+                        triggerStatusChangeNotification(reportId, stationNode, reporterName, status ?: "Ongoing")
                     }
                 }
 
@@ -397,7 +479,7 @@ class DashboardActivity : AppCompatActivity() {
                     val status = snapshot.child("status").getValue(String::class.java)
 
                     if (reporterName == myName && status == "Ongoing") {
-                        triggerStatusChangeNotification(reportId, stationNode, reporterName, status)
+                        triggerStatusChangeNotification(reportId, stationNode, reporterName, status ?: "Ongoing")
                     }
                 }
 
@@ -421,12 +503,70 @@ class DashboardActivity : AppCompatActivity() {
     }
 
     private fun updateInboxBadge(count: Int) {
-        val activity = this
-        if (activity is DashboardActivity) {
-            val badge = activity.binding.bottomNavigation.getOrCreateBadge(R.id.inboxFragment)
-            badge.isVisible = count > 0
-            badge.number = count
-            badge.maxCharacterCount = 3
+        val badge = binding.bottomNavigation.getOrCreateBadge(R.id.inboxFragment)
+        badge.isVisible = count > 0
+        badge.number = count
+        badge.maxCharacterCount = 3
+    }
+
+    private fun startRealtimeUnreadCounter() {
+        // Guard: don’t double-attach
+        if (unreadCounterListeners.isNotEmpty()) return
+
+        val myContact = user?.contact?.trim().orEmpty()
+        val myName = currentUserName?.trim().orEmpty()
+        if (myContact.isEmpty() && myName.isEmpty()) {
+            // Nothing to watch
+            updateInboxBadge(0)
+            return
+        }
+
+        // Keep a rolling total across stations; recomputed per station update
+        val latestCounts = mutableMapOf<String, Int>()
+
+        fun pushTotals() {
+            val total = latestCounts.values.sum()
+            unreadMessageCount = total
+            sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
+            runOnUiThread { updateInboxBadge(unreadMessageCount) }
+        }
+
+        stationNodes.forEach { stationNode ->
+            val baseRef = database.child(stationNode).child("ResponseMessage")
+            val query: Query = if (myContact.isNotEmpty()) {
+                baseRef.orderByChild("contact").equalTo(myContact)
+            } else {
+                baseRef.orderByChild("reporterName").equalTo(myName)
+            }
+
+            val v = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    // Filter locally for unread since we can’t orderBy two fields
+                    var count = 0
+                    snapshot.children.forEach { msg ->
+                        val isRead = msg.child("isRead").getValue(Boolean::class.java) ?: false
+                        if (!isRead) count++
+                    }
+                    latestCounts[stationNode] = count
+                    pushTotals()
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    // If cancelled, treat this station as 0 so totals still make sense
+                    latestCounts[stationNode] = 0
+                    pushTotals()
+                }
+            }
+
+            query.addValueEventListener(v)
+            unreadCounterListeners += query to v
         }
     }
+
+    private fun stopRealtimeUnreadCounter() {
+        unreadCounterListeners.forEach { (q, v) ->
+            try { q.removeEventListener(v) } catch (_: Exception) {}
+        }
+        unreadCounterListeners.clear()
+    }
+
 }

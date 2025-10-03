@@ -211,6 +211,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         if (mapReady && hasLocationPermission()) {
             enableMyLocationSafely()
             startLocationUpdates()
+            primeLocationOnce() // <— add this line
         }
     }
 
@@ -299,6 +300,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         if (hasLocationPermission()) {
             enableMyLocationSafely()
             startLocationUpdates()
+            primeLocationOnce() // NEW
         } else {
             requestLocationPerms()
         }
@@ -800,4 +802,33 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         }
 
     }
+
+    @SuppressLint("MissingPermission")
+    private fun primeLocationOnce() {
+        if (!hasLocationPermission()) return
+        // 1) Try last known (fast)
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { loc ->
+                if (loc != null) {
+                    userLatitude = loc.latitude
+                    userLongitude = loc.longitude
+                    // draw immediately with whatever we have
+                    updateMapIfReady()
+                } else {
+                    // 2) Fallback: single current fix (one-shot)
+                    val cts = com.google.android.gms.tasks.CancellationTokenSource()
+                    fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                        .addOnSuccessListener { fresh ->
+                            if (fresh != null) {
+                                userLatitude = fresh.latitude
+                                userLongitude = fresh.longitude
+                                updateMapIfReady()
+                            }
+                        }
+                }
+            }
+    }
+
+
+
 }
