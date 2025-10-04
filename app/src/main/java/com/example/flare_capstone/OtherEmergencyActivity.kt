@@ -86,6 +86,8 @@ class OtherEmergencyActivity : AppCompatActivity() {
         binding = ActivityOtherEmergencyBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        binding.sendButton.isEnabled = false   // 🔒 default disabled
+
         auth = FirebaseAuth.getInstance()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         connectivityManager = getSystemService(ConnectivityManager::class.java)
@@ -111,8 +113,24 @@ class OtherEmergencyActivity : AppCompatActivity() {
             finish()
         }
 
+        // When user taps Send – add quick guards BEFORE showing the dialog
         binding.sendButton.setOnClickListener {
             val now = System.currentTimeMillis()
+            val hasCoords = !(latitude == 0.0 && longitude == 0.0)
+
+            if (!hasCoords) {
+                Toast.makeText(this, "Getting your location… please wait.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (!tagumOk) {
+                Toast.makeText(this, "Reporting is allowed only within Tagum.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (selectedEmergency.isNullOrBlank()) {
+                Toast.makeText(this, "Please select an emergency type.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
             if (now - lastReportTime >= 5 * 60 * 1000) {
                 showSendConfirmationDialog(now)
             } else {
@@ -120,6 +138,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please wait $wait seconds before submitting again.", Toast.LENGTH_LONG).show()
             }
         }
+
 
 
         // Optional: ask for SMS permission proactively (since we send notifications)
@@ -175,13 +194,27 @@ class OtherEmergencyActivity : AppCompatActivity() {
             if (loc != null) {
                 latitude = loc.latitude
                 longitude = loc.longitude
-                // kick off reverse-geocode
                 FetchBarangayAddressTask(this, latitude, longitude).execute()
-                // also compute radius check early (in case geocode fails)
                 evaluateTagumGateWith(null)
             } else {
-                Toast.makeText(this, "Unable to get current location", Toast.LENGTH_SHORT).show()
-                evaluateTagumGateWith(null)
+                // Fallback: request a single update so hasCoords becomes true soon
+                val req = com.google.android.gms.location.LocationRequest.create().apply {
+                    interval = 10_000L; fastestInterval = 5_000L
+                    priority = com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
+                    numUpdates = 1
+                }
+                fusedLocationClient.requestLocationUpdates(req, object: com.google.android.gms.location.LocationCallback() {
+                    override fun onLocationResult(res: com.google.android.gms.location.LocationResult) {
+                        val l = res.lastLocation ?: return
+                        latitude = l.latitude; longitude = l.longitude
+                        fusedLocationClient.removeLocationUpdates(this)
+                        FetchBarangayAddressTask(this@OtherEmergencyActivity, latitude, longitude).execute()
+                        evaluateTagumGateWith(null)
+                    }
+                }, mainLooper)
+
+                Toast.makeText(this, "Getting location…", Toast.LENGTH_SHORT).show()
+                evaluateTagumGateWith(null) // still runs geo gate (likely false) + disables send
             }
         }.addOnFailureListener {
             Toast.makeText(this, "Failed to get location: ${it.message}", Toast.LENGTH_SHORT).show()
@@ -197,10 +230,13 @@ class OtherEmergencyActivity : AppCompatActivity() {
         updateSendEnabled()
     }
 
+    // Central place to decide if "Send" can be pressed
     private fun updateSendEnabled() {
-        val enabled = (selectedEmergency != null) && tagumOk
+        val hasCoords = !(latitude == 0.0 && longitude == 0.0)
+        val enabled = (selectedEmergency != null) && tagumOk && hasCoords
         binding.sendButton.isEnabled = enabled
     }
+
 
     private fun updateButtonAppearance(selected: String?) {
         resetButtonAppearance(binding.floodingButton)
@@ -239,22 +275,22 @@ class OtherEmergencyActivity : AppCompatActivity() {
         evaluateTagumGateWith(address)
     }
 
+    // evaluateTagumGateWith() – keep, but ensure we re-run the enable logic
     private fun evaluateTagumGateWith(address: String?) {
         val textOk = looksLikeTagum(address?.trim())
         val geoOk  = isWithinTagumByDistance(latitude, longitude)
-
         tagumOk = textOk || geoOk
 
         if (tagumOk) {
             if (address.isNullOrBlank() && geoOk) {
                 exactLocation = "Within Tagum vicinity – https://www.google.com/maps?q=$latitude,$longitude"
             }
-
         } else {
             Toast.makeText(this, "Outside Tagum area. You can't submit a report.", Toast.LENGTH_SHORT).show()
         }
         updateSendEnabled()
     }
+
 
     // ---- Firebase helpers ----
     private fun anyToString(v: Any?): String = when (v) {
@@ -292,7 +328,12 @@ class OtherEmergencyActivity : AppCompatActivity() {
     }
 
     private fun showSendConfirmationDialog(currentTime: Long) {
-        // Guard rails
+
+        val hasCoords = !(latitude == 0.0 && longitude == 0.0)
+        if (!hasCoords) {
+            Toast.makeText(this, "Getting your location… please wait.", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!tagumOk) {
             Toast.makeText(this, "Reporting is allowed only within Tagum.", Toast.LENGTH_SHORT).show()
             return
@@ -339,15 +380,15 @@ class OtherEmergencyActivity : AppCompatActivity() {
 
     // ---- Submit report (routes to nearest station) ----
     private fun sendEmergencyReport(currentTime: Long) {
-        if (!tagumOk) {
-            Toast.makeText(this, "Reporting is allowed only within Tagum.", Toast.LENGTH_SHORT).show()
+        val hasCoords = !(latitude == 0.0 && longitude == 0.0)
+        if (!hasCoords || !tagumOk) {
+            Toast.makeText(this, "Location not confirmed in Tagum yet.", Toast.LENGTH_SHORT).show()
             return
         }
-
         val userId = auth.currentUser?.uid
         val type = selectedEmergency
-        if (userId == null || type == null) {
-            Toast.makeText(this, "Please select an emergency type", Toast.LENGTH_SHORT).show()
+        if (userId == null || type.isNullOrBlank()) {
+            Toast.makeText(this, "Please select an emergency type.", Toast.LENGTH_SHORT).show()
             return
         }
 

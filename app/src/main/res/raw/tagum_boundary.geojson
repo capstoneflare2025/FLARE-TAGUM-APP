@@ -1,0 +1,64 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2025-09-08T09:20:52Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "relation/15986415",
+        "admin_level": "6",
+        "admin_type:PH": "component_city",
+        "alt_name": "Tagum City",
+        "boundary": "administrative",
+        "is_in:province": "Davao del Norte",
+        "name": "Tagum",
+        "name:en": "Tagum",
+        "name:ja": "タグム",
+        "name:ru": "Тагум",
+        "name:tl": "Tagum",
+        "name:zh": "塔古姆",
+        "official_name": "City of Tagum",
+        "old_name": "Magugpo",
+        "old_ref": "112319000",
+        "population": "296202",
+        "population:date": "2020-05-01",
+        "postal_code": "8100",
+        "ref": "1102319000",
+        "start_date": "1941-06-27",
+        "type": "boundary",
+        "wikipedia": "en:Tagum City",
+        "@geometry": "bounds"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              125.7338476,
+              7.2464576
+            ],
+            [
+              125.8873042,
+              7.2464576
+            ],
+            [
+              125.8873042,
+              7.5105777
+            ],
+            [
+              125.7338476,
+              7.5105777
+            ],
+            [
+              125.7338476,
+              7.2464576
+            ]
+          ]
+        ]
+      },
+      "id": "relation/15986415"
+    }
+  ]
+}

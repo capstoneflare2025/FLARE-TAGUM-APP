@@ -7,7 +7,9 @@ package com.example.flare_capstone
  * - Single active route with proper toggle (tap again to hide)
  * - Prevents duplicate/stale routes via request generation guard
  * - Robust resets so it works after returning to this Fragment
- * - NEW: Tagum geofence for Fire/Other buttons (toast + block)
+ * - Tagum geofence uses res/raw/tagum_boundary.geojson (polygon only)
+ *   • No circle fallback
+ *   • No boundary overlay drawn on the map
  * ========================================================= */
 
 import android.Manifest
@@ -23,7 +25,6 @@ import android.os.Looper
 import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewTreeObserver
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
@@ -141,17 +142,9 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
-    /* ---------------- Tagum Geo-fence (center + radius) ---------------- */
-    private val TAGUM_CENTER_LAT = 7.447725
-    private val TAGUM_CENTER_LON = 125.804150
-    private val TAGUM_RADIUS_METERS = 11_000.0 // ~11 km
-
-    /** Returns true if current user location is within Tagum radius */
-    private fun isInsideTagum(): Boolean {
-        if (userLatitude == 0.0 && userLongitude == 0.0) return false
-        val meters = distanceKm(userLatitude, userLongitude, TAGUM_CENTER_LAT, TAGUM_CENTER_LON) * 1000.0
-        return meters <= TAGUM_RADIUS_METERS
-    }
+    /* ---------------- Tagum geofence (polygon only) ---------------- */
+    // Polygon rings (outer rings only). No map overlay; used only for geofencing.
+    private var tagumRings: List<List<LatLng>>? = null
 
     /* ---------------- Permissions ---------------- */
     private val locationPermsLauncher = registerForActivityResult(
@@ -198,24 +191,20 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         // ---------------- Button handlers with Tagum gate ----------------
         binding.fireButton.setOnClickListener {
             if (userLatitude == 0.0 && userLongitude == 0.0) {
-                postToast("Getting your location…")
-                return@setOnClickListener
+                postToast("Getting your location…"); return@setOnClickListener
             }
             if (!isInsideTagum()) {
-                postToast("You can’t submit a report outside Tagum.")
-                return@setOnClickListener
+                postToast("You can’t submit a report outside Tagum."); return@setOnClickListener
             }
             startActivity(Intent(requireActivity(), FireLevelActivity::class.java))
         }
 
         binding.otherButton.setOnClickListener {
             if (userLatitude == 0.0 && userLongitude == 0.0) {
-                postToast("Getting your location…")
-                return@setOnClickListener
+                postToast("Getting your location…"); return@setOnClickListener
             }
             if (!isInsideTagum()) {
-                postToast("You can’t submit a report outside Tagum.")
-                return@setOnClickListener
+                postToast("You can’t submit a report outside Tagum."); return@setOnClickListener
             }
             startActivity(Intent(requireActivity(), OtherEmergencyActivity::class.java))
         }
@@ -244,8 +233,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
                 R.id.nav_my_reports -> startActivity(Intent(requireContext(), MyReportActivity::class.java))
                 R.id.nav_logout -> { /* TODO */ }
             }
-            drawer?.closeDrawers()
-            true
+            drawer?.closeDrawers(); true
         }
 
         nav?.let { populateUserHeader(it) }
@@ -312,7 +300,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
         map.uiSettings.isZoomControlsEnabled = false
         map.uiSettings.isMapToolbarEnabled = false
-        map.uiSettings.isMyLocationButtonEnabled = true  // handy recenter button
+        map.uiSettings.isMyLocationButtonEnabled = true
 
         // Default to Philippines until we have a fix
         map.setOnMapLoadedCallback {
@@ -321,31 +309,27 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // Tap a station to draw/hide its (shortest) route (toggle) with race-guard
+        // Load Tagum polygon from res/raw (for geofence only; not drawn)
+        loadTagumBoundaryFromRaw()
+
+        // Tap a station to draw/hide its route
         map.setOnMarkerClickListener { marker ->
             val title = marker.title ?: return@setOnMarkerClickListener false
             if (title == "Your Location") return@setOnMarkerClickListener false
 
-            // Toggle: tap same station again -> hide
             if (selectedStationTitle == title && activePolyline != null) {
-                clearActiveRoute()
-                selectedStationTitle = null
-                // cancel any in-flight response
+                clearActiveRoute(); selectedStationTitle = null
                 routeRequestSeq.incrementAndGet()
                 postToast("Route hidden")
                 return@setOnMarkerClickListener true
             }
 
-            // Show this station's route (and hide any existing)
             if (userLatitude == 0.0 || userLongitude == 0.0) {
-                postToast("Waiting for your location…")
-                return@setOnMarkerClickListener true
+                postToast("Waiting for your location…"); return@setOnMarkerClickListener true
             }
 
-            val dest = getStationLatLngByTitle(title)
-            if (dest == null) {
-                postToast("Station location not available.")
-                return@setOnMarkerClickListener true
+            val dest = getStationLatLngByTitle(title) ?: run {
+                postToast("Station location not available."); return@setOnMarkerClickListener true
             }
 
             selectedStationTitle = title
@@ -365,12 +349,9 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             true
         }
 
-        // Tap empty map to clear the drawn route
         map.setOnMapClickListener {
             if (activePolyline != null) {
-                clearActiveRoute()
-                selectedStationTitle = null
-                // cancel any in-flight response
+                clearActiveRoute(); selectedStationTitle = null
                 routeRequestSeq.incrementAndGet()
                 postToast("Route cleared")
             }
@@ -551,8 +532,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     /** Base64 -> ImageView (handles data-URL prefixes) */
     private fun loadAvatarFromBase64Into(avatarB64: String?, target: ImageView) {
         if (avatarB64.isNullOrBlank()) {
-            target.setImageResource(R.drawable.ic_profile)
-            return
+            target.setImageResource(R.drawable.ic_profile); return
         }
         val pureBase64 = avatarB64.substringAfter("base64,", avatarB64)
         try {
@@ -593,7 +573,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     private fun updateMapIfReady() {
         if (!mapReady) return
 
-        // We can center on user even if stations haven't loaded yet
         if (userLatitude != 0.0 || userLongitude != 0.0) {
             if (!cameraFittedOnce) {
                 centerOnUser(animated = true, zoom = DEFAULT_ZOOM_CITY)
@@ -601,7 +580,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // Wait for stations before placing their markers
         if (!(canocotanFetched && laFilipinaFetched && mabiniFetched)) return
         if (userLatitude == 0.0 || userLongitude == 0.0) return
         if (!shouldUpdate(userLatitude, userLongitude)) return
@@ -619,37 +597,24 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             Triple("Mabini Fire Station", mabiniLat, mabiniLng)
         )
 
-        // user marker
         if (userMarker == null) {
             userMarker = map.addMarker(
-                MarkerOptions()
-                    .position(user)
-                    .title("Your Location")
-                    .icon(iconUser)
-                    .anchor(0.5f, 1f)
+                MarkerOptions().position(user).title("Your Location").icon(iconUser).anchor(0.5f, 1f)
             )
         } else {
             userMarker!!.position = user
         }
 
-        // nearest station (for icon only)
-        val dists = stations.mapIndexed { idx, t ->
-            idx to distanceKm(userLatitude, userLongitude, t.second, t.third)
-        }
+        val dists = stations.mapIndexed { idx, t -> idx to distanceKm(userLatitude, userLongitude, t.second, t.third) }
         val nearestIdx = dists.minByOrNull { it.second }?.first ?: 0
 
-        // place/update station markers
         stations.forEachIndexed { idx, (title, lat, lng) ->
             val pos = LatLng(lat, lng)
             val existing = stationMarkers[title]
             val desiredIcon = if (idx == nearestIdx) iconNearest else iconOther
             if (existing == null) {
                 stationMarkers[title] = map.addMarker(
-                    MarkerOptions()
-                        .position(pos)
-                        .title(title)
-                        .icon(desiredIcon)
-                        .anchor(0.5f, 1f)
+                    MarkerOptions().position(pos).title(title).icon(desiredIcon).anchor(0.5f, 1f)
                 )!!
             } else {
                 existing.position = pos
@@ -657,7 +622,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // Optional: refresh active route as you move, but ensure guard stops duplicates
         selectedStationTitle?.let { title ->
             val dest = getStationLatLngByTitle(title)
             if (dest != null) {
@@ -687,8 +651,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     /* =========================================================
-     * OSRM: fetch + draw ONE shortest route (selected station)
-     *  - guarded by request generation + title match to avoid stale draws
+     * OSRM: fetch + draw ONE shortest route
      * ========================================================= */
     private fun drawSingleRouteOSRM(
         origin: LatLng,
@@ -696,10 +659,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         requestedTitle: String,
         onDone: (() -> Unit)? = null
     ) {
-        // increment request generation and remember mine
         val mySeq = routeRequestSeq.incrementAndGet()
-
-        // Remove previous polyline immediately
         clearActiveRoute()
 
         Thread {
@@ -714,9 +674,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
                 val url = URL(urlStr)
                 val conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 12000
-                    readTimeout = 12000
+                    requestMethod = "GET"; connectTimeout = 12000; readTimeout = 12000
                 }
                 val code = conn.responseCode
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
@@ -739,31 +697,22 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
                         val msg = json.optString("message")
                         postToast("OSRM: $status${if (msg.isNotBlank()) " – $msg" else ""}")
                     }
-                } else {
-                    postToast("OSRM error ($code)")
-                }
+                } else postToast("OSRM error ($code)")
             } catch (e: Exception) {
                 postToast("OSRM failed: ${e.message}")
             }
 
             requireActivity().runOnUiThread {
-                // Discard stale responses (another tap already happened)
                 if (routeRequestSeq.get() != mySeq) return@runOnUiThread
-                // Also ensure user hasn't changed the selected station
                 if (selectedStationTitle != requestedTitle) return@runOnUiThread
 
                 if (points.isNotEmpty()) {
                     activePolyline = map.addPolyline(
-                        PolylineOptions()
-                            .addAll(points)
-                            .width(ROUTE_WIDTH_PX)
-                            .color(COLOR_ACTIVE)
-                            .geodesic(true)
+                        PolylineOptions().addAll(points).width(ROUTE_WIDTH_PX).color(COLOR_ACTIVE).geodesic(true)
                     )
                     activeDistanceMeters = meters
                     activeDurationSec = seconds
                 } else {
-                    // Fallback straight line
                     activePolyline = map.addPolyline(
                         PolylineOptions()
                             .add(origin, dest)
@@ -860,21 +809,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     /* =========================================================
-     * DataSnapshot utils
-     * ========================================================= */
-    private fun DataSnapshot.getDouble(key: String): Double {
-        val v = child(key).value ?: return 0.0
-        return when (v) {
-            is Double -> v
-            is Float -> v.toDouble()
-            is Long -> v.toDouble()
-            is Int -> v.toDouble()
-            is String -> v.toDoubleOrNull() ?: 0.0
-            else -> 0.0
-        }
-    }
-
-    /* =========================================================
      * Camera helpers
      * ========================================================= */
     private fun zoomToPhilippines(move: Boolean = true) {
@@ -896,7 +830,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     @SuppressLint("MissingPermission")
     private fun primeLocationOnce() {
         if (!hasLocationPermission()) return
-        // 1) Try last known (fast)
         fusedLocationClient.lastLocation
             .addOnSuccessListener { loc ->
                 if (loc != null) {
@@ -908,7 +841,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
                         cameraFittedOnce = true
                     }
                 } else {
-                    // 2) Fallback: single current fix (one-shot)
                     val cts = com.google.android.gms.tasks.CancellationTokenSource()
                     fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
                         .addOnSuccessListener { fresh ->
@@ -921,11 +853,128 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
                                     cameraFittedOnce = true
                                 }
                             } else {
-                                // 3) As a last resort, continuous updates will deliver a first fix
                                 startLocationUpdates()
                             }
                         }
                 }
             }
     }
+
+    /* =========================================================
+     * Tagum polygon loader + geofence (no drawing)
+     * ========================================================= */
+    private fun loadTagumBoundaryFromRaw() {
+        val ctx = context ?: return
+        try {
+            val ins = ctx.resources.openRawResource(R.raw.tagum_boundary)
+            val text = ins.bufferedReader().use { it.readText() }
+            val root = org.json.JSONObject(text)
+
+            fun arrToRing(arr: org.json.JSONArray): List<LatLng> {
+                val out = ArrayList<LatLng>(arr.length())
+                for (i in 0 until arr.length()) {
+                    val pt = arr.getJSONArray(i)
+                    val lon = pt.getDouble(0)
+                    val lat = pt.getDouble(1)
+                    out.add(LatLng(lat, lon))
+                }
+                out.trimToSize()
+                return out
+            }
+
+            val rings = mutableListOf<List<LatLng>>()
+            when (root.optString("type")) {
+                "Polygon" -> {
+                    val coords = root.getJSONArray("coordinates")
+                    if (coords.length() > 0) rings.add(arrToRing(coords.getJSONArray(0))) // outer ring only
+                }
+                "MultiPolygon" -> {
+                    val mcoords = root.getJSONArray("coordinates")
+                    for (i in 0 until mcoords.length()) {
+                        val poly = mcoords.getJSONArray(i)
+                        if (poly.length() > 0) rings.add(arrToRing(poly.getJSONArray(0)))
+                    }
+                }
+                "Feature" -> {
+                    val geom = root.getJSONObject("geometry")
+                    val t2 = geom.getString("type")
+                    if (t2 == "Polygon") {
+                        val coords = geom.getJSONArray("coordinates")
+                        if (coords.length() > 0) rings.add(arrToRing(coords.getJSONArray(0)))
+                    } else if (t2 == "MultiPolygon") {
+                        val mcoords = geom.getJSONArray("coordinates")
+                        for (i in 0 until mcoords.length()) {
+                            val poly = mcoords.getJSONArray(i)
+                            if (poly.length() > 0) rings.add(arrToRing(poly.getJSONArray(0)))
+                        }
+                    }
+                }
+                "FeatureCollection" -> {
+                    val feats = root.getJSONArray("features")
+                    for (i in 0 until feats.length()) {
+                        val geom = feats.getJSONObject(i).getJSONObject("geometry")
+                        val t2 = geom.getString("type")
+                        if (t2 == "Polygon") {
+                            val coords = geom.getJSONArray("coordinates")
+                            if (coords.length() > 0) rings.add(arrToRing(coords.getJSONArray(0)))
+                        } else if (t2 == "MultiPolygon") {
+                            val mcoords = geom.getJSONArray("coordinates")
+                            for (j in 0 until mcoords.length()) {
+                                val poly = mcoords.getJSONArray(j)
+                                if (poly.length() > 0) rings.add(arrToRing(poly.getJSONArray(0)))
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (rings.isNotEmpty()) {
+                tagumRings = rings
+            }
+        } catch (_: Exception) {
+            tagumRings = null // no fallback; outside until loaded
+        }
+    }
+
+    private fun pointInRing(pt: LatLng, ring: List<LatLng>): Boolean {
+        // Ray casting
+        var inside = false
+        var j = ring.size - 1
+        for (i in ring.indices) {
+            val xi = ring[i].longitude
+            val yi = ring[i].latitude
+            val xj = ring[j].longitude
+            val yj = ring[j].latitude
+            val intersects = ((yi > pt.latitude) != (yj > pt.latitude)) &&
+                    (pt.longitude < (xj - xi) * (pt.latitude - yi) / (yj - yi + 0.0) + xi)
+            if (intersects) inside = !inside
+            j = i
+        }
+        return inside
+    }
+
+    /** Polygon-only geofence. Returns false until polygon is loaded. */
+    private fun isInsideTagum(): Boolean {
+        if (userLatitude == 0.0 && userLongitude == 0.0) return false
+        val rings = tagumRings ?: return false
+        val pt = LatLng(userLatitude, userLongitude)
+        return rings.any { ring -> pointInRing(pt, ring) }
+    }
+
+
+    /* =========================================================
+ * DataSnapshot utils
+ * ========================================================= */
+    private fun DataSnapshot.getDouble(key: String): Double {
+        val v = child(key).value ?: return 0.0
+        return when (v) {
+            is Double -> v
+            is Float  -> v.toDouble()
+            is Long   -> v.toDouble()
+            is Int    -> v.toDouble()
+            is String -> v.toDoubleOrNull() ?: 0.0
+            else      -> 0.0
+        }
+    }
+
 }
