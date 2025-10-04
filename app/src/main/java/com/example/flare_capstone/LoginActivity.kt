@@ -12,7 +12,6 @@ import android.text.method.PasswordTransformationMethod
 import android.util.Patterns
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -76,7 +75,7 @@ class LoginActivity : AppCompatActivity() {
             finish()
         }
 
-        /* -------- Login flow (strict: block until verified) -------- */
+        /* -------- Login flow -------- */
         binding.loginButton.setOnClickListener { onLoginClicked() }
 
         /* -------- Forgot Password -------- */
@@ -98,7 +97,16 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /* =========================================================
-     * Login click → sign-in first, then enforce verification
+     * Helpers
+     * ========================================================= */
+    private fun isFirefighter(emailLc: String): Boolean {
+        return emailLc == "mabinifirefighter123@gmail.com" ||
+                emailLc == "lafilipinafirefighter123@gmail.com" ||
+                emailLc == "canocotanfirefighter123@gmail.com"
+    }
+
+    /* =========================================================
+     * Login click → sign-in; SKIP verify for firefighter emails
      * ========================================================= */
     private fun onLoginClicked() {
         val email = binding.email.text.toString().trim().lowercase()
@@ -150,7 +158,7 @@ class LoginActivity : AppCompatActivity() {
                     return@addOnCompleteListener
                 }
 
-                // 3) Sign-in succeeded -> block until verified (real-time watcher)
+                // 3) Sign-in succeeded
                 val user = auth.currentUser
                 if (user == null) {
                     setLoginEnabled(true)
@@ -158,6 +166,16 @@ class LoginActivity : AppCompatActivity() {
                     return@addOnCompleteListener
                 }
 
+                val emailLc = (user.email ?: "").lowercase()
+
+                // ---- SKIP verification for firefighter emails ----
+                if (isFirefighter(emailLc)) {
+                    setLoginEnabled(true)
+                    routeToDashboard(emailLc)  // will send firefighters to their dashboard
+                    return@addOnCompleteListener
+                }
+
+                // ---- For everyone else, enforce verification ----
                 user.reload().addOnCompleteListener { reloadTask ->
                     if (!reloadTask.isSuccessful) {
                         setLoginEnabled(true)
@@ -176,9 +194,9 @@ class LoginActivity : AppCompatActivity() {
                         return@addOnCompleteListener
                     }
 
-                    // Verified — route by email (case-insensitive)
+                    // Verified — route normally
                     setLoginEnabled(true)
-                    routeToDashboard((user.email ?: "").lowercase())
+                    routeToDashboard(emailLc)
                 }
             }
     }
@@ -189,7 +207,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /* =========================================================
-     * Blocking, real-time verification watcher
+     * Blocking, real-time verification watcher (non-firefighter only)
      * ========================================================= */
     private fun showBlockingVerifyWatcher(user: com.google.firebase.auth.FirebaseUser) {
         val dlg = MaterialAlertDialogBuilder(this)
@@ -269,22 +287,20 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /* =========================================================
-     * Routing
+     * Routing (keeps firefighter special-case)
      * ========================================================= */
     private fun routeToDashboard(emailLc: String) {
-        val intent = if (
-            emailLc == "mabinifirefighter123@gmail.com" ||
-            emailLc == "lafilipinafirefighter123@gmail.com" ||
-            emailLc == "canocotanfirefighter123@gmail.com"
-        ) Intent(this, DashboardFireFighterActivity::class.java)
-        else Intent(this, DashboardActivity::class.java)
+        val intent = if (isFirefighter(emailLc))
+            Intent(this, DashboardFireFighterActivity::class.java)
+        else
+            Intent(this, DashboardActivity::class.java)
 
         startActivity(intent)
         finish()
     }
 
     /* =========================================================
-     * Forgot Password
+     * Forgot Password (unchanged)
      * ========================================================= */
     private fun onForgotPassword() {
         val email = binding.email.text.toString().trim()
@@ -441,9 +457,7 @@ class LoginActivity : AppCompatActivity() {
         }
 
         val icon = ImageView(this).apply {
-            // Replace with your drawable if available; fallback noted:
-            setImageResource(R.drawable.ic_person_add_24 /* or android.R.drawable.ic_input_add */)
-            imageTintList = android.content.res.ColorStateList.valueOf(resolveAttrColor(com.google.android.material.R.attr.colorPrimary))
+            setImageResource(R.drawable.ic_person_add_24)
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
                 bottomMargin = dp(8)
                 gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -455,7 +469,6 @@ class LoginActivity : AppCompatActivity() {
             text = "No account found"
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20f)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(resolveAttrColor(com.google.android.material.R.attr.colorOnSurface))
         }
         root.addView(title)
 
@@ -464,7 +477,6 @@ class LoginActivity : AppCompatActivity() {
         val msg = TextView(this).apply {
             text = "We couldn't find an account for:\n$email\n\nWould you like to create one?"
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(resolveAttrColor(com.google.android.material.R.attr.colorOnSurface))
         }
         root.addView(msg)
 
@@ -488,9 +500,7 @@ class LoginActivity : AppCompatActivity() {
         }
 
         val icon = ImageView(this).apply {
-            // Replace with your drawable if available; fallback noted:
-            setImageResource(R.drawable.ic_warning_24 /* or android.R.drawable.ic_dialog_alert */)
-            imageTintList = android.content.res.ColorStateList.valueOf(resolveAttrColor(com.google.android.material.R.attr.colorError))
+            setImageResource(R.drawable.ic_warning_24)
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
                 bottomMargin = dp(8)
                 gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -502,7 +512,6 @@ class LoginActivity : AppCompatActivity() {
             text = "Use a different sign-in"
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20f)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(resolveAttrColor(com.google.android.material.R.attr.colorOnSurface))
         }
         root.addView(title)
 
@@ -511,7 +520,6 @@ class LoginActivity : AppCompatActivity() {
         val body = TextView(this).apply {
             text = "The email $email is registered with a different sign-in method ($providers).\nPlease use the same method you used to sign up."
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(resolveAttrColor(com.google.android.material.R.attr.colorOnSurface))
         }
         root.addView(body)
 
@@ -521,9 +529,7 @@ class LoginActivity : AppCompatActivity() {
             text = providers
             setPadding(dp(10), dp(6), dp(10), dp(6))
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(resolveAttrColor(com.google.android.material.R.attr.colorOnSecondary))
             background = MaterialShapeDrawable().apply {
-                fillColor = android.content.res.ColorStateList.valueOf(resolveAttrColor(com.google.android.material.R.attr.colorSecondary))
                 setCornerSize(dp(14).toFloat())
             }
         }
@@ -542,11 +548,4 @@ class LoginActivity : AppCompatActivity() {
             )
         })
     }
-
-    private fun resolveAttrColor(attr: Int): Int {
-        val tv = android.util.TypedValue()
-        theme.resolveAttribute(attr, tv, true)
-        return tv.data
-    }
 }
-

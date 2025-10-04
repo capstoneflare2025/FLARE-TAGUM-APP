@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="35dp"
+    android:height="35dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Base pin -->
+    <path
+        android:fillColor="#E00024"
+        android:pathData="M12,2C8.14,2 5,5.14 5,9c0,5.25 7,13 7,13s7,-7.75 7,-13c0,-3.86 -3.14,-7 -7,-7z"/>
+    <!-- Inner 'flame' (stylized teardrop) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,7.5
+            C10.5,9 10,10.2 10,11.3
+            C10,12.9 11.3,14.2 12.9,14.2
+            C14.6,14.2 16,12.9 16,11.2
+            C16,9.7 15.2,8.5 14.1,7.6
+            C14.1,8.7 13.5,9.7 12.6,10.2
+            C12.6,9.3 12.7,8.3 13.0,7.5
+            Z"/>
+</vector>

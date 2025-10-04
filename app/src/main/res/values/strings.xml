@@ -3,6 +3,7 @@
     <string name="underline_text"><u>Click Here SMS Report!</u></string>
     <!-- res/values/strings.xml -->
     <string name="google_maps_key">AIzaSyDdJ1N_5HKH_JHndZvmM7jb4H4VLb2iq1Q</string>
+    <string name="google_geocoding_key">AIzaSyDdJ1N_5HKH_JHndZvmM7jb4H4VLb2iq1Q</string>
 
     <!-- res/values/strings.xml -->
     <string name="content_desc_profile_photo">Profile photo</string>
