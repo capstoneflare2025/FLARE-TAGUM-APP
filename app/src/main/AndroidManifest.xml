@@ -68,6 +68,7 @@
         </activity>
 
         <activity android:name=".RegisterActivity"/>
+        <activity android:name=".VerifyEmailActivity"/>
         <activity android:name=".DashboardActivity"/>
         <activity android:name=".FireLevelActivity"/>
         <activity android:name=".OtherEmergencyActivity"/>

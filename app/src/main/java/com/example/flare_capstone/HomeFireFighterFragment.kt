@@ -634,22 +634,4 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         return path
     }
 
-    // ---------- Google Maps app navigation (optional fallback) ----------
-
-    private fun openGoogleMapsDirections(origin: LatLng, dest: LatLng) {
-        val uri = Uri.parse(
-            "https://www.google.com/maps/dir/?api=1" +
-                    "&origin=${origin.latitude},${origin.longitude}" +
-                    "&destination=${dest.latitude},${dest.longitude}" +
-                    "&travelmode=driving&dir_action=navigate"
-        )
-        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-            setPackage("com.google.android.apps.maps")
-        }
-        try {
-            startActivity(intent)
-        } catch (e: Exception) {
-            startActivity(Intent(Intent.ACTION_VIEW, uri))
-        }
-    }
 }
