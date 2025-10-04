@@ -99,6 +99,7 @@ class FireLevelActivity : AppCompatActivity() {
         binding = ActivityFireLevelBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+
         auth = FirebaseAuth.getInstance()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         connectivityManager = getSystemService(ConnectivityManager::class.java)

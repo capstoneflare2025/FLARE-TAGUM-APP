@@ -67,6 +67,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private var stationPrefix: String? = null
     private var fireReportPath: String? = null
     private var otherEmergencyPath: String? = null
+    private var smsReportPath: String? = null
 
     // Current pick
     private var ongoingIncidentId: String? = null
@@ -77,12 +78,15 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     // Listeners
     private var fireListener: ValueEventListener? = null
     private var otherListener: ValueEventListener? = null
+    private var smsListener: ValueEventListener? = null
     private var fireQuery: Query? = null
     private var otherQuery: Query? = null
+    private var smsQuery: Query? = null
 
     // Cached snapshots for merge
     private var fireSnap: DataSnapshot? = null
     private var otherSnap: DataSnapshot? = null
+    private var smsSnap: DataSnapshot? = null
 
     // Camera recenter thresholds
     private var lastCameraMy: LatLng? = null
@@ -95,7 +99,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private var lastRoutedDest: LatLng? = null
     private val routeRecomputeMeters = 25f
 
-    private enum class Source { FIRE, OTHER }
+    private enum class Source { FIRE, OTHER, SMS }
 
     private val locationPerms = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -148,6 +152,8 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         val base = "${stationPrefix}FireStation"
         fireReportPath     = "$base/${stationPrefix}FireReport"
         otherEmergencyPath = "$base/${stationPrefix}OtherEmergency"
+        // Adjust if your actual node differs (e.g., "$base/${stationPrefix}SmsReport")
+        smsReportPath      = "$base/SmsReport"
 
         binding.completed.setOnClickListener { markCompleted() }
 
@@ -306,11 +312,12 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         try { fusedLocation.removeLocationUpdates(locCallback) } catch (_: Exception) {}
     }
 
-    // ---------- Firebase listeners (merge FireReport + OtherEmergency) ----------
+    // ---------- Firebase listeners (merge FireReport + OtherEmergency + SmsReports) ----------
 
     private fun attachReportListeners() {
-        val firePath = fireReportPath ?: return
+        val firePath  = fireReportPath ?: return
         val otherPath = otherEmergencyPath ?: return
+        val smsPath   = smsReportPath ?: return
 
         fireQuery = FirebaseDatabase.getInstance().getReference(firePath)
             .orderByChild("status")
@@ -321,6 +328,11 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             .orderByChild("status")
             .equalTo("Ongoing")
             .limitToLast(20)
+
+        // For SMS, many entries start as "Pending" and may use varied field names.
+        // We fetch the latest 50 and filter in code.
+        smsQuery = FirebaseDatabase.getInstance().getReference(smsPath)
+            .limitToLast(50)
 
         fireListener = object : ValueEventListener {
             override fun onDataChange(snap: DataSnapshot) {
@@ -340,20 +352,34 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
                 Log.e(TAG, "OtherEmergency cancelled: ${error.message}")
             }
         }
+        smsListener = object : ValueEventListener {
+            override fun onDataChange(snap: DataSnapshot) {
+                smsSnap = snap
+                recomputePick()
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(TAG, "SmsReports cancelled: ${error.message}")
+            }
+        }
 
         fireQuery?.addValueEventListener(fireListener as ValueEventListener)
         otherQuery?.addValueEventListener(otherListener as ValueEventListener)
+        smsQuery?.addValueEventListener(smsListener as ValueEventListener)
     }
 
     private fun detachReportListeners() {
         fireListener?.let { fireQuery?.removeEventListener(it) }
         otherListener?.let { otherQuery?.removeEventListener(it) }
+        smsListener?.let  { smsQuery?.removeEventListener(it) }
         fireListener = null
         otherListener = null
+        smsListener = null
         fireQuery = null
         otherQuery = null
+        smsQuery = null
         fireSnap = null
         otherSnap = null
+        smsSnap = null
     }
 
     private fun recomputePick() {
@@ -365,43 +391,41 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         var total = 0
         var ongoingCount = 0
 
-        // FireReport: "timeStamp"
-        fireSnap?.let { snap ->
-            for (c in snap.children) {
-                total++
-                val lat = getDoubleRelaxed(c, "latitude")
-                val lon = getDoubleRelaxed(c, "longitude")
-                val ts = c.child("timeStamp").getValue(Long::class.java) ?: 0L
-                if (lat != null && lon != null && ts > 0) {
-                    ongoingCount++
-                    if (ts > newestTs) {
-                        newestTs = ts
-                        pickId = c.key
-                        pickPt = LatLng(lat, lon)
-                        pickSrc = Source.FIRE
-                    }
+        fun considerNode(c: DataSnapshot, source: Source, statusKey: String = "status") {
+            total++
+            val status = ((c.child(statusKey).value as? String)?.trim()?.lowercase()) ?: ""
+            val isAcceptable = when (source) {
+                Source.SMS -> status == "ongoing" || status == "pending"
+                else       -> status == "ongoing"
+            }
+            if (!isAcceptable) return
+
+            // latitude/longitude can be lat/lng or latitude/longitude
+            val lat = getDoubleRelaxed(c, "latitude") ?: getDoubleRelaxed(c, "lat")
+            val lon = getDoubleRelaxed(c, "longitude") ?: getDoubleRelaxed(c, "lng")
+            // timestamp may be timeStamp / timestamp / time
+            val ts = getLongRelaxed(c, "timeStamp")
+                ?: getLongRelaxed(c, "timestamp")
+                ?: getLongRelaxed(c, "time")
+                ?: 0L
+
+            if (lat != null && lon != null && ts > 0L) {
+                ongoingCount++
+                if (ts > newestTs) {
+                    newestTs = ts
+                    pickId = c.key
+                    pickPt = LatLng(lat, lon)
+                    pickSrc = source
                 }
             }
         }
 
-        // OtherEmergency: "timestamp"
-        otherSnap?.let { snap ->
-            for (c in snap.children) {
-                total++
-                val lat = getDoubleRelaxed(c, "latitude")
-                val lon = getDoubleRelaxed(c, "longitude")
-                val ts = c.child("timestamp").getValue(Long::class.java) ?: 0L
-                if (lat != null && lon != null && ts > 0) {
-                    ongoingCount++
-                    if (ts > newestTs) {
-                        newestTs = ts
-                        pickId = c.key
-                        pickPt = LatLng(lat, lon)
-                        pickSrc = Source.OTHER
-                    }
-                }
-            }
-        }
+        // FireReport: commonly uses "timeStamp"
+        fireSnap?.children?.forEach { considerNode(it, Source.FIRE) }
+        // OtherEmergency: commonly uses "timestamp"
+        otherSnap?.children?.forEach { considerNode(it, Source.OTHER) }
+        // SmsReports: varied fields, allow Pending or Ongoing
+        smsSnap?.children?.forEach { considerNode(it, Source.SMS) }
 
         if (pickId == null || pickPt == null || pickSrc == null) {
             ongoingIncidentId = null
@@ -410,14 +434,14 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             clearAllRoutes()
             incidentMarker?.let { it.remove(); incidentMarker = null }
             updatePins(lastMyPoint, null)
-            Log.d(TAG, "No ongoing reports; total=$total ongoingCount=$ongoingCount")
+            Log.d(TAG, "No ongoing/pending reports; total=$total ongoingCount=$ongoingCount")
             return
         }
 
         ongoingIncidentId = pickId
         ongoingIncidentSource = pickSrc
         currentReportPoint = pickPt
-        Log.d(TAG, "Picked ongoing ${pickSrc.name} id=$pickId ts=$newestTs at $pickPt")
+        Log.d(TAG, "Picked ${pickSrc.name} id=$pickId ts=$newestTs at $pickPt")
         updatePins(lastMyPoint, currentReportPoint)
     }
 
@@ -430,12 +454,22 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    private fun getLongRelaxed(node: DataSnapshot, key: String): Long? {
+        val v = node.child(key).value
+        return when (v) {
+            is Number -> v.toLong()
+            is String -> v.trim().toLongOrNull()
+            else -> null
+        }
+    }
+
     private fun markCompleted() {
         val id = ongoingIncidentId ?: return
         val src = ongoingIncidentSource ?: return
         val path = when (src) {
-            Source.FIRE -> fireReportPath
+            Source.FIRE  -> fireReportPath
             Source.OTHER -> otherEmergencyPath
+            Source.SMS   -> smsReportPath
         } ?: return
         FirebaseDatabase.getInstance()
             .getReference("$path/$id")
@@ -633,5 +667,4 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         }
         return path
     }
-
 }
