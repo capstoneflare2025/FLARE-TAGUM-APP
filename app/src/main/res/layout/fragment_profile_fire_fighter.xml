@@ -75,6 +75,19 @@
                 app:layout_constraintTop_toBottomOf="@id/fullyName"
                 app:layout_constraintEnd_toEndOf="parent"
                 android:layout_marginTop="4dp" />
+
+            <TextView
+                android:id="@+id/contact"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="09750647852"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                app:layout_constraintStart_toStartOf="@id/fullName"
+                app:layout_constraintTop_toBottomOf="@id/fullName"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginTop="4dp" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -235,16 +248,15 @@
                     android:layout_marginStart="16dp"/>
 
                 <!-- kept your arrow id; you can swap to a chevron image later -->
-                <TextView
+                <ImageView
                     android:id="@+id/logoutArrow"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="›"
-                    android:textSize="28sp"
-                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_chevron_right_24"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:layout_constraintBottom_toBottomOf="parent"/>
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:tint="?attr/colorOnSurfaceVariant" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
         </LinearLayout>

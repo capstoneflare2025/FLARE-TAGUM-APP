@@ -82,14 +82,19 @@
                 android:value=".DashboardActivity" />
         </activity>
 
+        <activity
+            android:name=".DashboardFireFighterActivity"
+            android:launchMode="singleTop" />
+
 
         <activity android:name=".EditProfileActivity"/>
+        <activity android:name=".EditFirefighterProfileActivity"/>
         <activity android:name=".ChangePasswordActivity"/>
         <activity android:name=".AboutAppActivity"/>
         <activity android:name=".UserGuideActivity"/>
         <activity android:name=".MyReportActivity"/>
         <activity android:name=".FireStationInfoActivity"/>
-        <activity android:name=".DashboardFireFighterActivity"/>
+
 
     </application>
 
