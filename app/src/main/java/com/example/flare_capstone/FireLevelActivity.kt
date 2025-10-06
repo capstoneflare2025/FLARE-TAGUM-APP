@@ -12,8 +12,12 @@ import android.os.Bundle
 import android.os.CountDownTimer
 import android.telephony.SmsManager
 import android.util.Log
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
@@ -63,6 +67,21 @@ class FireLevelActivity : AppCompatActivity() {
     private val TAGUM_CENTER_LON = 125.804150
     private val TAGUM_RADIUS_METERS = 11_000f // ~11 km buffer around center
 
+    // --- Add near your other state vars ---
+    private var isResolvingLocation = false
+    private var locationConfirmed = false
+    private var locationResolveTimer: CountDownTimer? = null
+    // NEW: locating dialog (separate from your connectivity dialog)
+    private var locatingDialog: AlertDialog? = null
+    // add near locatingDialog
+    private var locatingDialogText: TextView? = null
+    // Overlay spinner with logo
+    private var overlayView: View? = null
+    private var overlayText: TextView? = null
+
+
+
+
     /* ---------------- Station Mappings ---------------- */
     private val profileKeyByStation = mapOf(
         "LaFilipinaFireStation" to "LaFilipinaProfile",
@@ -86,9 +105,25 @@ class FireLevelActivity : AppCompatActivity() {
 
     /* ---------------- Network Callback ---------------- */
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) { runOnUiThread { hideLoadingDialog() } }
-        override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
+        override fun onAvailable(network: Network) {
+            runOnUiThread {
+                hideLoadingDialog()
+                if (isResolvingLocation && !locationConfirmed) {
+                    // Nudge the hint while still confirming
+                    beginLocationConfirmation("Confirming location…")
+                }
+            }
+        }
+        override fun onLost(network: Network) {
+            runOnUiThread {
+                showLoadingDialog("No internet connection")
+                if (!locationConfirmed) {
+                    beginLocationConfirmation("Waiting for internet…")
+                }
+            }
+        }
     }
+
 
     /* =========================================================
      * Lifecycle
@@ -98,6 +133,9 @@ class FireLevelActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityFireLevelBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Before requesting location, show the confirming state
+        beginLocationConfirmation()
 
 
         auth = FirebaseAuth.getInstance()
@@ -132,7 +170,10 @@ class FireLevelActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         kotlin.runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
+        locationResolveTimer?.cancel()
+        locatingDialog?.dismiss()
     }
+
 
     /* =========================================================
      * Connectivity
@@ -210,11 +251,13 @@ class FireLevelActivity : AppCompatActivity() {
                 latitude = it.latitude
                 longitude = it.longitude
                 fusedLocationClient.removeLocationUpdates(this)
-                hideLoadingDialog()
+                // Do NOT end confirmation yet — we must wait for address resolution
+                updateLocatingDialog("Reverse geocoding…")
                 FetchBarangayAddressTask(this@FireLevelActivity, latitude, longitude).execute()
             }
         }
     }
+
 
     /* =========================================================
      * Tagum Checks
@@ -233,6 +276,13 @@ class FireLevelActivity : AppCompatActivity() {
      * Report Flow
      * ========================================================= */
     private fun checkAndSendAlertReport() {
+
+        if (!locationConfirmed) {
+            if (!isResolvingLocation) beginLocationConfirmation()
+            Toast.makeText(this, "Cannot submit yet — location not confirmed.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val now = System.currentTimeMillis()
         if (now - lastReportTime >= 5 * 60 * 1000) {
             binding.sendButton.isEnabled = false
@@ -294,6 +344,14 @@ class FireLevelActivity : AppCompatActivity() {
     }
 
     private fun showSendConfirmationDialog() {
+
+        if (!locationConfirmed) {
+            // Keep spinner going and inform the user
+            if (!isResolvingLocation) beginLocationConfirmation()
+            Toast.makeText(this, "Please wait — confirming your location…", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         // Gather inputs
         val fireStartTime = getFormattedTime()
         val affectedHousesStr = binding.housesAffectedInput.text?.toString()?.trim().orEmpty()
@@ -349,11 +407,11 @@ class FireLevelActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Confirm Fire Report")
             .setMessage(message)
-            .setPositiveButton("Submit") { _, _ ->
+            .setPositiveButton("Proceed") { _, _ ->
                 // Proceed with your existing flow
                 checkAndSendAlertReport()
             }
-            .setNegativeButton("Edit", null)
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -556,12 +614,80 @@ class FireLevelActivity : AppCompatActivity() {
         readableAddress = finalAddress
 
         if (textOk || geoOk) {
-            binding.sendButton.isEnabled = true
-            Toast.makeText(this, "Location confirmed: ${if (finalAddress.isNotBlank()) finalAddress else "within Tagum radius"}", Toast.LENGTH_SHORT).show()
-            addressHandled = true
+            endLocationConfirmation(true, "Location confirmed${if (finalAddress.isNotBlank()) ": $finalAddress" else ""}")
         } else {
-            binding.sendButton.isEnabled = false
-            Toast.makeText(this, "Outside Tagum area. You can't submit a report.", Toast.LENGTH_SHORT).show()
+            endLocationConfirmation(false, "Outside Tagum area. You can't submit a report.")
         }
     }
+
+
+    private fun beginLocationConfirmation(hint: String = "Confirming location…") {
+        isResolvingLocation = true
+        locationConfirmed = false
+
+        // Show non-blocking spinner dialog (keep Send button enabled)
+        showLocatingDialog(hint)
+
+        // Start a countdown that updates the dialog text
+        locationResolveTimer?.cancel()
+        locationResolveTimer = object : CountDownTimer(25_000, 1_000) {
+            override fun onTick(ms: Long) {
+                updateLocatingDialog("$hint ${ms / 1000}s")
+            }
+            override fun onFinish() {
+                if (!locationConfirmed) {
+                    updateLocatingDialog("Still confirming location… check internet.")
+                    Toast.makeText(this@FireLevelActivity, "Slow internet: still confirming location.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun endLocationConfirmation(success: Boolean, message: String) {
+        isResolvingLocation = false
+        locationConfirmed = success
+
+        hideLocatingDialog()
+
+        if (message.isNotBlank()) {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
+
+        locationResolveTimer?.cancel()
+        locationResolveTimer = null
+    }
+
+    private fun showLocatingDialog(initialText: String) {
+        if (locatingDialog?.isShowing == true) return
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(48, 40, 48, 40)
+            gravity = Gravity.CENTER_VERTICAL
+            addView(ProgressBar(this@FireLevelActivity).apply { isIndeterminate = true })
+            locatingDialogText = TextView(this@FireLevelActivity).apply {
+                text = initialText
+                setPadding(32, 0, 0, 0)
+                textSize = 16f
+            }
+            addView(locatingDialogText)
+        }
+        locatingDialog = AlertDialog.Builder(this)
+            .setTitle("Detecting location")
+            .setView(content)
+            .setCancelable(true)
+            .create()
+        locatingDialog?.show()
+    }
+
+    private fun updateLocatingDialog(text: String) {
+        locatingDialogText?.text = text
+    }
+
+    private fun hideLocatingDialog() {
+        locatingDialog?.dismiss()
+        locatingDialog = null
+        locatingDialogText = null
+    }
+
+
 }

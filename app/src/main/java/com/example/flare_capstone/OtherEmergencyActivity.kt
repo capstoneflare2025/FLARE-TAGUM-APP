@@ -8,6 +8,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.telephony.SmsManager
 import android.util.Log
 import android.widget.TextView
@@ -52,6 +53,21 @@ class OtherEmergencyActivity : AppCompatActivity() {
 
     private var tagumOk: Boolean = false // set true if text mentions Tagum OR inside Tagum radius
 
+    // Non-blocking locating dialog + timer
+    private var locatingDialog: AlertDialog? = null
+    private var locationResolveTimer: android.os.CountDownTimer? = null
+    private var isResolvingLocation = false
+
+    // Optional: if you want to reflect success state
+    private var locationConfirmed = false
+
+    private val COOLDOWN_MS = 5 * 60 * 1000L
+    private var sendCooldownTimer: CountDownTimer? = null
+    private var sendOriginalText: CharSequence? = null
+
+
+
+
     private val profileKeyByStation = mapOf(
         "LaFilipinaFireStation" to "LaFilipinaProfile",
         "CanocotanFireStation"  to "CanocotanProfile",
@@ -74,9 +90,24 @@ class OtherEmergencyActivity : AppCompatActivity() {
         val reportNode: String
     )
 
+    // You call registerDefaultNetworkCallback(networkCallback) below, so define it:
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) { runOnUiThread { hideLoadingDialog() } }
-        override fun onLost(network: Network) { runOnUiThread { showLoadingDialog("No internet connection") } }
+        override fun onAvailable(network: Network) {
+            runOnUiThread {
+                hideLoadingDialog()
+                if (isResolvingLocation && locatingDialog != null) {
+                    updateLocatingDialog("Confirming location…")
+                }
+            }
+        }
+        override fun onLost(network: Network) {
+            runOnUiThread {
+                showLoadingDialog("No internet connection")
+                if (isResolvingLocation && locatingDialog != null) {
+                    updateLocatingDialog("Waiting for internet…")
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +116,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
 
         binding = ActivityOtherEmergencyBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        beginLocationConfirmation()
 
         binding.sendButton.isEnabled = false   // 🔒 default disabled
 
@@ -150,7 +182,10 @@ class OtherEmergencyActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         kotlin.runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
+        locationResolveTimer?.cancel()
+        locatingDialog?.dismiss()
     }
+
 
     // ---- Connectivity ----
     private fun isConnected(): Boolean {
@@ -190,6 +225,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     private fun getLastLocation() {
+        updateLocatingDialog("Getting GPS fix…")
         fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
             if (loc != null) {
                 latitude = loc.latitude
@@ -214,10 +250,12 @@ class OtherEmergencyActivity : AppCompatActivity() {
                 }, mainLooper)
 
                 Toast.makeText(this, "Getting location…", Toast.LENGTH_SHORT).show()
+                updateLocatingDialog("Waiting for GPS…")
                 evaluateTagumGateWith(null) // still runs geo gate (likely false) + disables send
             }
         }.addOnFailureListener {
             Toast.makeText(this, "Failed to get location: ${it.message}", Toast.LENGTH_SHORT).show()
+            updateLocatingDialog("Location error — retrying…")
             evaluateTagumGateWith(null)
         }
     }
@@ -270,10 +308,22 @@ class OtherEmergencyActivity : AppCompatActivity() {
     }
 
     /** Called by FetchBarangayAddressTask when reverse geocoding returns. */
+    /** Called by FetchBarangayAddressTask when reverse geocoding returns. */
     fun handleFetchedAddress(address: String?) {
         exactLocation = address?.trim().orEmpty().ifEmpty { "Unknown Location" }
         evaluateTagumGateWith(address)
+
+        if (tagumOk) {
+            val msg = if (exactLocation.isNotBlank() && exactLocation != "Unknown Location")
+                "Location confirmed: $exactLocation"
+            else
+                "Location confirmed within Tagum vicinity"
+            endLocationConfirmation(true, msg)
+        } else {
+            endLocationConfirmation(false, "Outside Tagum area. You can't submit a report.")
+        }
     }
+
 
     // evaluateTagumGateWith() – keep, but ensure we re-run the enable logic
     private fun evaluateTagumGateWith(address: String?) {
@@ -369,11 +419,11 @@ class OtherEmergencyActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Confirm Emergency Report")
             .setMessage(message)
-            .setPositiveButton("Submit") { _, _ ->
+            .setPositiveButton("Proceed") { _, _ ->
                 // Proceed with your existing flow
                 sendEmergencyReport(currentTime)
             }
-            .setNegativeButton("Edit", null)
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -508,4 +558,72 @@ class OtherEmergencyActivity : AppCompatActivity() {
         Location.distanceBetween(lat1, lon1, lat2, lon2, results)
         return results[0]
     }
+
+    private fun showLocatingDialog(initialText: String) {
+        if (locatingDialog?.isShowing == true) return
+        val padding = resources.displayMetrics.density.times(16).toInt()
+
+        val progress = android.widget.ProgressBar(this).apply { isIndeterminate = true }
+        val textView = android.widget.TextView(this).apply {
+            text = initialText
+            setPadding(padding, 0, 0, 0)
+            textSize = 16f
+        }
+        val row = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            setPadding(padding * 2, padding * 2, padding * 2, padding * 2)
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(progress)
+            addView(textView)
+            id = android.R.id.content // so we can find it later
+        }
+
+        locatingDialog = AlertDialog.Builder(this)
+            .setView(row)
+            .setCancelable(true) // user may dismiss; guards still prevent bad submits
+            .create()
+        locatingDialog?.show()
+    }
+
+    private fun updateLocatingDialog(text: String) {
+        val root = locatingDialog?.window?.decorView ?: return
+        val vg = root.findViewById<android.view.ViewGroup>(android.R.id.content) ?: return
+        val tv = (vg.getChildAt(0) as? android.widget.LinearLayout)?.getChildAt(1) as? android.widget.TextView
+        tv?.text = text
+    }
+
+    private fun hideLocatingDialog() {
+        locatingDialog?.dismiss()
+        locatingDialog = null
+    }
+
+    private fun beginLocationConfirmation(hint: String = "Confirming location…") {
+        isResolvingLocation = true
+        locationConfirmed = false
+        showLocatingDialog(hint)
+
+        locationResolveTimer?.cancel()
+        locationResolveTimer = object : android.os.CountDownTimer(25_000, 1_000) {
+            override fun onTick(ms: Long) {
+                updateLocatingDialog("$hint ${ms / 1000}s")
+            }
+            override fun onFinish() {
+                if (!locationConfirmed) {
+                    updateLocatingDialog("Still confirming location… check internet.")
+                    Toast.makeText(this@OtherEmergencyActivity, "Slow internet: still confirming location.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun endLocationConfirmation(success: Boolean, toast: String = "") {
+        isResolvingLocation = false
+        locationConfirmed = success
+        hideLocatingDialog()
+        locationResolveTimer?.cancel()
+        locationResolveTimer = null
+        if (toast.isNotBlank()) Toast.makeText(this, toast, Toast.LENGTH_SHORT).show()
+    }
+
+
 }
