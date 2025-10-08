@@ -72,6 +72,7 @@
         <activity android:name=".DashboardActivity"/>
         <activity android:name=".FireLevelActivity"/>
         <activity android:name=".OtherEmergencyActivity"/>
+        <activity android:name=".VehicleAccidentActivity"/>
         <activity android:name=".ReportSmsActivity"/>
         <activity
             android:name=".FireReportResponseActivity"

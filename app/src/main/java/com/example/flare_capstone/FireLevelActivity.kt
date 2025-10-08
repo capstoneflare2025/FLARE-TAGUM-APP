@@ -222,18 +222,23 @@ class FireLevelActivity : AppCompatActivity() {
         binding.spinnerMinute.dropDownWidth = 150
         binding.spinnerAmpm.dropDownWidth = 150
 
-        val hourAdapter = ArrayAdapter(this, R.layout.simple_spinner_item, (1..12).toList())
-        hourAdapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
+        val hourAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, (1..12).toList())
+        hourAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.spinnerHour.adapter = hourAdapter
 
-        val minuteAdapter = ArrayAdapter(this, R.layout.simple_spinner_item, (0..59).toList())
-        minuteAdapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
+        // Minutes in steps of 10
+        val minuteOptions = (0..50 step 10).map { it.toString().padStart(2, '0') }
+        val minuteAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, minuteOptions)
+        minuteAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.spinnerMinute.adapter = minuteAdapter
+        binding.spinnerMinute.setSelection(1) // Default to "10"
 
-        val ampmAdapter = ArrayAdapter(this, R.layout.simple_spinner_item, listOf("AM", "PM"))
-        ampmAdapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
+        val ampmAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, listOf("AM", "PM"))
+        ampmAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.spinnerAmpm.adapter = ampmAdapter
     }
+
+
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     private fun requestLocationUpdates() {

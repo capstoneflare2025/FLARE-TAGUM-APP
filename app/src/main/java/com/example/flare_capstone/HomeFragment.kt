@@ -14,6 +14,8 @@ package com.example.flare_capstone
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -199,6 +201,16 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             startActivity(Intent(requireActivity(), FireLevelActivity::class.java))
         }
 
+//        binding.accidentButton.setOnClickListener {
+//            if (userLatitude == 0.0 && userLongitude == 0.0) {
+//                postToast("Getting your location…"); return@setOnClickListener
+//            }
+//            if (!isInsideTagum()) {
+//                postToast("You can’t submit a report outside Tagum."); return@setOnClickListener
+//            }
+//            startActivity(Intent(requireActivity(), VehicleAccidentActivity::class.java))
+//        }
+
         binding.otherButton.setOnClickListener {
             if (userLatitude == 0.0 && userLongitude == 0.0) {
                 postToast("Getting your location…"); return@setOnClickListener
@@ -231,7 +243,9 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
                     }
                 }
                 R.id.nav_my_reports -> startActivity(Intent(requireContext(), MyReportActivity::class.java))
-                R.id.nav_logout -> { /* TODO */ }
+                R.id.nav_settings -> { /* TODO */ }
+                R.id.nav_about -> startActivity(Intent(requireContext(), AboutAppActivity::class.java))
+                R.id.nav_settings -> { logout()}
             }
             drawer?.closeDrawers(); true
         }
@@ -289,6 +303,30 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         routeRequestSeq.incrementAndGet()
 
         _binding = null
+    }
+
+    private fun logout(){
+        val inflater = requireActivity().layoutInflater
+        val dialogView = inflater.inflate(R.layout.dialog_logout, null)
+        dialogView.findViewById<ImageView>(R.id.logoImageView).setImageResource(R.drawable.ic_logo)
+
+        AlertDialog.Builder(requireActivity())
+            .setView(dialogView)
+            .setPositiveButton("Yes") { _, _ ->
+                // Clear cached notification flags + unread count so next login is fresh
+                val shownPrefs = requireActivity().getSharedPreferences("shown_notifications", Context.MODE_PRIVATE)
+                shownPrefs.edit().clear().apply() // removes all "shown" keys and unread_message_count
+                // ensure unread_message_count is 0 explicitly
+                shownPrefs.edit().putInt("unread_message_count", 0).apply()
+
+                FirebaseAuth.getInstance().signOut()
+                startActivity(Intent(requireActivity(), MainActivity::class.java))
+                Toast.makeText(requireActivity(), "You have been logged out.", Toast.LENGTH_SHORT).show()
+                requireActivity().finish()
+            }
+            .setNegativeButton("No") { dialog, _ -> dialog.dismiss() }
+            .create()
+            .show()
     }
 
     /* =========================================================

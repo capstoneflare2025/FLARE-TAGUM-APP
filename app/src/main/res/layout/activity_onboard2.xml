@@ -31,7 +31,7 @@
         android:id="@+id/descriptionText"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="• Tap **Fire** to report a fire. Fill in details, then **Send** (or **Cancel**).\n\n• Tap **Other** to choose Flooding, Gas leak, Tree fall, etc. Then **Send** (or **Cancel**)."
+        android:text="• Tap **Fire** to report a fire. Fill in details, then **Send** (or **Cancel**).\n\n• Tap **Other** to choose Flooding, Gas leak, Tree fall, etc. Then **Send** (or **Cancel**).\n\n• Tap **Vehicle Accident** to report road or car crashes, then **Send** (or **Cancel**)."
         android:textSize="16sp"
         android:textColor="?attr/colorOnBackground"
         android:alpha="0.88"
@@ -45,12 +45,12 @@
         app:layout_constraintEnd_toEndOf="parent"
         tools:ignore="HardcodedText" />
 
-    <!-- Preview card with the two actions -->
+    <!-- Preview card with the three actions -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/buttonContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:contentDescription="Preview of Fire and Other buttons"
+        android:contentDescription="Preview of Fire, Other, and Vehicle Accident buttons"
         app:cardCornerRadius="20dp"
         app:cardUseCompatPadding="true"
         app:strokeColor="?attr/colorOutline"
@@ -63,7 +63,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@id/nextButton"
         app:layout_constraintHeight_default="percent"
-        app:layout_constraintHeight_percent="0.38">
+        app:layout_constraintHeight_percent="0.45">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -97,7 +97,22 @@
                 app:iconGravity="textStart"
                 app:iconPadding="8dp"
                 app:cornerRadius="24dp"
-                android:backgroundTint="#E87F2E" />
+                android:backgroundTint="#E87F2E"
+                android:layout_marginBottom="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/accidentButton"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Vehicle Accident"
+                android:textAllCaps="false"
+                android:textColor="@color/black"
+                app:icon="@drawable/ic_car_crash_24"
+                app:iconTint="@color/black"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp"
+                app:cornerRadius="24dp"
+                android:backgroundTint="#f6f007" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
