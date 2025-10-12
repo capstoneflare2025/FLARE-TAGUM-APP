@@ -130,7 +130,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="• Report fire incidents\n• Get real-time status updates\n• Request emergency help\n• Track incidents on a live map"
+                android:text="• Report fire incidents, Other Emergency, Medical Emergency\n• Get real-time status updates\n• Request emergency help\n• Track incidents on a live map"
                 android:textSize="14sp"
                 android:textColor="?attr/colorOnSurface"/>
         </LinearLayout>
@@ -183,7 +183,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Email: fireStation@gmail.com\nPhone: 0975 064 7852"
+                android:text="Email: capstoneflare2025@gmail.com\nPhone: 0991 246 9212"
                 android:textSize="14sp"
                 android:textColor="?attr/colorOnSurface"
                 android:autoLink="email|phone"
@@ -250,7 +250,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Version —"
+                android:text="Version — Android 11"
                 android:textSize="14sp"
                 android:textColor="?attr/colorOnSurface"/>
 

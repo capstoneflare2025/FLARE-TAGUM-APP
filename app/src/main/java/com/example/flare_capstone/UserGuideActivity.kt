@@ -43,19 +43,19 @@ class UserGuideActivity: AppCompatActivity() {
 
         binding.back.setOnClickListener { onBackPressed() }
 
-        // 🔥 Show fire tutorial dialog
-        binding.reportFireCard.setOnClickListener {
-            VideoDialogFragment
-                .newInstance("Tutorial Report Fire", R.raw.tutorial_report_fire)
-                .show(supportFragmentManager, "video_fire")
-        }
-
-        // 🚨 Show other emergency tutorial dialog
-        binding.reportOtherCard.setOnClickListener {
-            VideoDialogFragment
-                .newInstance("Tutorial Report Other", R.raw.tutorial_report_other)
-                .show(supportFragmentManager, "video_other")
-        }
+//        // 🔥 Show fire tutorial dialog
+//        binding.reportFireCard.setOnClickListener {
+//            VideoDialogFragment
+//                .newInstance("Tutorial Report Fire", R.raw.tutorial_report_fire)
+//                .show(supportFragmentManager, "video_fire")
+//        }
+//
+//        // 🚨 Show other emergency tutorial dialog
+//        binding.reportOtherCard.setOnClickListener {
+//            VideoDialogFragment
+//                .newInstance("Tutorial Report Other", R.raw.tutorial_report_other)
+//                .show(supportFragmentManager, "video_other")
+//        }
     }
 
     private fun isConnected(): Boolean {

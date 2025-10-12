@@ -200,22 +200,23 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="1) Tap the Report button.\n2) Select Fire.\n3) Answer the questions (time started, affected houses, etc.).\n4) Tap Send to submit or Cancel to discard."
+                        android:text="1) Tap the Fire Report button.\n2) Select Involve (House on Fire, etc.).\n3) Capture Photo (Optional) \n4) Tap Send to submit or Cancel to discard."
                         android:textSize="14sp"
                         android:textColor="?attr/colorOnSurface" />
 
-                    <!-- Title aligned bottom right -->
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:layout_marginTop="12dp"
-                        android:text="Tutorial"
-                        android:textStyle="bold"
-                        android:textSize="16sp"
-                        android:textColor="#E00024"/>
+<!--                    &lt;!&ndash; Title aligned bottom right &ndash;&gt;-->
+<!--                    <TextView-->
+<!--                        android:layout_width="match_parent"-->
+<!--                        android:layout_height="wrap_content"-->
+<!--                        android:gravity="end"-->
+<!--                        android:layout_marginTop="12dp"-->
+<!--                        android:text="Tutorial"-->
+<!--                        android:textStyle="bold"-->
+<!--                        android:textSize="16sp"-->
+<!--                        android:textColor="#E00024"/>-->
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
 
             <!-- Reporting Other Emergencies -->
             <com.google.android.material.card.MaterialCardView
@@ -264,27 +265,87 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="1) Tap the Other button.\n2) Select the type of emergency (Flooding, Building Collapse, Gas Leak, Fallen Tree, etc.).\n3) Tap Send to submit or Cancel to discard."
+                        android:text="1) Tap the Other Emergency Report button.\n2) Select Involve (Flood, etc.).\n3) Capture Photo (Optional) \n4) Tap Send to submit or Cancel to discard."
                         android:textSize="14sp"
                         android:textColor="?attr/colorOnSurface" />
 
                     <!-- Title aligned bottom right -->
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:layout_marginTop="12dp"
-                        android:text="Tutorial"
-                        android:textStyle="bold"
-                        android:textSize="16sp"
-                        android:textColor="#E00024"/>
-
+<!--                    <TextView-->
+<!--                        android:layout_width="match_parent"-->
+<!--                        android:layout_height="wrap_content"-->
+<!--                        android:gravity="end"-->
+<!--                        android:layout_marginTop="12dp"-->
+<!--                        android:text="Tutorial"-->
+<!--                        android:textStyle="bold"-->
+<!--                        android:textSize="16sp"-->
+<!--                        android:textColor="#E00024"/>-->
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <Space
+
+            <!-- Reporting Emergency Medical Services -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/reportEmsCard"
                 android:layout_width="match_parent"
-                android:layout_height="16dp"/>
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardCornerRadius="20dp"
+                app:cardUseCompatPadding="true"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="1dp"
+                app:cardForegroundColor="@android:color/transparent"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@drawable/ic_ambulance_24"
+                            android:layout_marginEnd="8dp"
+                            app:tint="?attr/colorError"  />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Reporting Emergency Medical Services"
+                            android:textStyle="bold"
+                            android:textSize="16sp"/>
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="1) Tap the EMS Report button.\n2) Select Involve (Vehicular, etc.).\n3) Capture Photo (Optional) \n4) Tap Send to submit or Cancel to discard."
+                        android:textSize="14sp"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <!-- Title aligned bottom right -->
+<!--                    <TextView-->
+<!--                        android:layout_width="match_parent"-->
+<!--                        android:layout_height="wrap_content"-->
+<!--                        android:gravity="end"-->
+<!--                        android:layout_marginTop="12dp"-->
+<!--                        android:text="Tutorial"-->
+<!--                        android:textStyle="bold"-->
+<!--                        android:textSize="16sp"-->
+<!--                        android:textColor="#E00024"/>-->
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

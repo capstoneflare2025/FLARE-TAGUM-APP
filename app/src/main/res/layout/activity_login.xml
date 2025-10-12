@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -62,7 +61,6 @@
                 app:strokeColor="?attr/colorOutline"
                 app:strokeWidth="1dp">
 
-                <!-- Keep this id the same as yours -->
                 <LinearLayout
                     android:background="@color/background_sms"
                     android:id="@+id/curved_container"
@@ -71,13 +69,21 @@
                     android:orientation="vertical"
                     android:padding="20dp">
 
-                    <!-- Email -->
+                    <!-- Email Label -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Email"
+                        android:textSize="16sp"
+                        android:textColor="@color/white"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Email Input -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/emailLayout"
                         style="@style/Widget.Material3.TextInputLayout.FilledBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Email"
                         app:startIconDrawable="@drawable/ic_email_24">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -95,27 +101,35 @@
                         android:layout_width="1dp"
                         android:layout_height="12dp" />
 
-                    <!-- Password -->
+                    <!-- Password Label -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Password"
+                        android:textSize="16sp"
+                        android:textColor="@color/white"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Password Input -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/passwordLayout"
                         style="@style/Widget.Material3.TextInputLayout.FilledBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Password"
                         app:endIconMode="password_toggle"
                         app:startIconDrawable="@drawable/ic_lock_24">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/password"
-                            android:background="@drawable/input_field_bg"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:imeOptions="actionDone"
                             android:inputType="textPassword"
+                            android:background="@drawable/input_field_bg"
                             android:maxLines="1" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- Forgot -->
+                    <!-- Forgot Password Link -->
                     <TextView
                         android:id="@+id/forgotPassword"
                         android:layout_width="wrap_content"
@@ -131,7 +145,7 @@
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
-                    <!-- Login -->
+                    <!-- Login Button -->
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/loginButton"
                         android:layout_width="match_parent"
@@ -181,5 +195,4 @@
                 android:layout_height="24dp"/>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-
 </androidx.constraintlayout.widget.ConstraintLayout>

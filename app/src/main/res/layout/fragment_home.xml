@@ -34,7 +34,7 @@
             app:layout_constraintTop_toBottomOf="@id/topAppBar"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="-15dp"/>
+            android:layout_marginTop="-45dp"/>
 
         <!-- Map inside a rounded card -->
         <com.google.android.material.card.MaterialCardView
@@ -42,6 +42,7 @@
             android:layout_width="0dp"
             android:layout_height="0dp"
             app:cardCornerRadius="20dp"
+            android:layout_marginTop="30dp"
             app:cardUseCompatPadding="true"
             app:strokeColor="?attr/colorOutline"
             app:strokeWidth="1dp"
@@ -58,79 +59,83 @@
                 android:layout_height="match_parent" />
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Actions (responsive 2-column grid) -->
+        <!-- Actions (stacking the buttons vertically) -->
         <androidx.gridlayout.widget.GridLayout
             android:id="@+id/button_container"
             android:layout_width="0dp"
+
+            android:foregroundGravity="center"
             android:layout_height="wrap_content"
             app:alignmentMode="alignMargins"
-            app:columnCount="2"
+            app:columnCount="1"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:useDefaultMargins="true">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/fire_button"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                app:layout_columnWeight="1"
-                android:text="Fire Report"
-                android:textAllCaps="false"
-                android:contentDescription="Report a fire"
-                app:icon="@drawable/ic_fire_24"
-                app:iconPadding="8dp"
-                app:iconGravity="textStart"
-                app:cornerRadius="28dp"
-                android:backgroundTint="#E00024"
-                android:textColor="?attr/colorOnPrimary" />
+        <!-- Fire Report Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/fire_button"
+            android:layout_width="304dp"
+            android:layout_height="56dp"
+            app:layout_gravity="center"
+            android:text="Fire Report"
+            android:textAllCaps="false"
+            android:contentDescription="Report a fire"
+            app:icon="@drawable/ic_fire_24"
+            app:iconPadding="8dp"
+            app:iconGravity="textStart"
+            app:cornerRadius="28dp"
+            android:backgroundTint="#E00024"
+            android:textColor="?attr/colorOnPrimary" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/other_button"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                app:layout_columnWeight="1"
-                android:text="Other Report"
-                android:textAllCaps="false"
-                android:contentDescription="Report other emergency"
-                app:icon="@drawable/ic_warning_24"
-                app:iconPadding="8dp"
-                app:iconGravity="textStart"
-                app:cornerRadius="28dp"
-                android:backgroundTint="#E87F2E"
-                android:textColor="?attr/colorOnSecondary" />
+        <!-- Other Report Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/other_button"
+            android:layout_width="304dp"
+            android:layout_height="56dp"
+            app:layout_gravity="center"
+            android:text="Other Emergency Report"
+            android:textAllCaps="false"
+            android:contentDescription="Report other emergency"
+            app:icon="@drawable/ic_warning_24"
+            app:iconPadding="8dp"
+            app:iconGravity="textStart"
+            app:cornerRadius="28dp"
+            android:backgroundTint="#E87F2E"
+            android:textColor="?attr/colorOnSecondary" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/accident_button"
-                android:layout_width="wrap_content"
-                android:layout_height="56dp"
-                android:minWidth="0dp"
-                android:text="Emergency Medical Services"
-                android:textAllCaps="false"
-                android:contentDescription="Report a vehicle accident"
-                app:icon="@drawable/ic_car_crash_24"
-                app:iconPadding="8dp"
-                app:iconGravity="textStart"
-                app:cornerRadius="28dp"
-                android:backgroundTint="#f6f007"
-                app:iconTint="@color/black"
-                android:textColor="@color/black"
-                app:layout_columnSpan="2"
-                app:layout_gravity="center_horizontal"
-                android:layout_marginTop="8dp"/>
+        <!-- Emergency Medical Services Report Button (spans across full width) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/accident_button"
+            android:layout_width="304dp"
+            android:layout_height="56dp"
+            android:minWidth="0dp"
+            android:text="Emergency Medical Services Report"
+            android:textAllCaps="false"
+            android:contentDescription="Report a vehicle accident"
+            app:icon="@drawable/ic_car_crash_24"
+            app:iconPadding="8dp"
+            app:iconGravity="textStart"
+            app:cornerRadius="28dp"
+            android:backgroundTint="#f6f007"
+            app:iconTint="@color/black"
+            android:textColor="@color/black"
+            android:layout_marginTop="8dp"
+            app:layout_gravity="center" />
 
-        </androidx.gridlayout.widget.GridLayout>
+    </androidx.gridlayout.widget.GridLayout>
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Navigation Drawer -->
-    <com.google.android.material.navigation.NavigationView
-        android:id="@+id/nav_view"
-        android:layout_width="wrap_content"
-        android:layout_height="match_parent"
-        android:layout_gravity="start"
-        app:itemIconTint="?attr/colorOnSurface"
-        app:itemTextColor="?attr/colorOnSurface"
-        app:headerLayout="@layout/drawer_header"
-        app:menu="@menu/drawer_menu"/>
-</androidx.drawerlayout.widget.DrawerLayout>
+<com.google.android.material.navigation.NavigationView
+android:id="@+id/nav_view"
+android:layout_width="wrap_content"
+android:layout_height="match_parent"
+android:layout_gravity="start"
+app:itemIconTint="?attr/colorOnSurface"
+app:itemTextColor="?attr/colorOnSurface"
+app:headerLayout="@layout/drawer_header"
+app:menu="@menu/drawer_menu"/>
+    </androidx.drawerlayout.widget.DrawerLayout>

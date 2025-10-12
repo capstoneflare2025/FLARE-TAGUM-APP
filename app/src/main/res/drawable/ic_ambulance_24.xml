@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+
+    <!-- Body of the ambulance -->
+    <path android:fillColor="#ffffff"
+        android:pathData="M6,12H42V36H6z"/>
+
+    <!-- Ambulance roof -->
+    <path android:fillColor="#ffffff"
+        android:pathData="M8,8H40V12H8z"/>
+
+    <!-- Ambulance wheels -->
+    <path android:fillColor="#000000"
+        android:pathData="M12,36C13.66,36 15,37.34 15,39C15,40.66 13.66,42 12,42C10.34,42 9,40.66 9,39C9,37.34 10.34,36 12,36zM36,36C37.66,36 39,37.34 39,39C39,40.66 37.66,42 36,42C34.34,42 33,40.66 33,39C33,37.34 34.34,36 36,36z"/>
+
+    <!-- Ambulance cross symbol -->
+    <path android:fillColor="#E00024"
+        android:pathData="M16,20H20V24H16zM20,22H24V26H20z"/>
+
+</vector>
