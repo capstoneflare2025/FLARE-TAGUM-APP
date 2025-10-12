@@ -472,7 +472,7 @@ class EmergencyMedicalServicesActivity : AppCompatActivity() {
                                             addressOrMap = addrText
                                         )
                                     }
-                                    Toast.makeText(this, "Report submitted to central (nearest unavailable).", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this, "Report submitted Please wait for responder", Toast.LENGTH_SHORT).show()
                                     startActivity(Intent(this, DashboardActivity::class.java)); finish()
                                 }
                             }

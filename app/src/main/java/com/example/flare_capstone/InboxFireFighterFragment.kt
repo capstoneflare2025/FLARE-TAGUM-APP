@@ -38,14 +38,10 @@ class InboxFireFighterFragment : Fragment() {
         recyclerView = view.findViewById(R.id.recyclerView)
         emptyText = view.findViewById(R.id.noMessagesText)
 
-        recyclerView.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-            setHasFixedSize(true)
-        }
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.setHasFixedSize(true)
 
-        adapter = FireFighterResponseMessageAdapter(mutableListOf()) { station ->
-            // TODO: open chat screen for this station.id if needed
-        }
+        adapter = FireFighterResponseMessageAdapter(mutableListOf()) { /* open chat if needed */ }
         recyclerView.adapter = adapter
 
         attachForLoggedInAccount()
@@ -58,13 +54,11 @@ class InboxFireFighterFragment : Fragment() {
             return
         }
 
-        // /TagumCityCentralFireStation/FireFighter/AllFireFighterAccount
         val root = FirebaseDatabase.getInstance()
             .getReference("TagumCityCentralFireStation")
             .child("FireFighter")
             .child("AllFireFighterAccount")
 
-        // Match the account by email
         accountsRef = root.orderByChild("email").equalTo(email)
         accountsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -82,51 +76,65 @@ class InboxFireFighterFragment : Fragment() {
                     val name = accSnap.child("name").getValue(String::class.java) ?: id
                     val profileUrl = accSnap.child("profileUrl").getValue(String::class.java) ?: ""
 
-                    // Base item; last message info filled by listener below
+                    // Seed row; message fields will be filled by AdminMessages listener
                     stationMap[id] = FireFighterStation(
                         id = id,
                         name = name,
                         lastMessage = "",
                         timestamp = 0L,
                         profileUrl = profileUrl,
-                        lastSender = "" // will be filled
+                        lastSender = "",
+                        isRead = true,
+                        hasAudio = false,
+                        hasImage = false
                     )
 
-                    // Listen for latest AdminMessages
                     val lastMsgQuery = accSnap.ref.child("AdminMessages")
                         .orderByChild("timestamp")
                         .limitToLast(1)
 
                     val msgListener = object : ValueEventListener {
                         override fun onDataChange(msgSnap: DataSnapshot) {
+                            // Read as before:
                             var lastText = ""
                             var lastTs = 0L
                             var lastSender = ""
+                            var hasImage = false
+                            var hasAudio = false
+                            var isRead = true
 
                             for (m in msgSnap.children) {
                                 lastText = m.child("text").getValue(String::class.java) ?: ""
+                                val img = m.child("imageBase64").getValue(String::class.java)
+                                val aud = m.child("audioBase64").getValue(String::class.java)
+                                hasImage = !img.isNullOrBlank()
+                                hasAudio = !aud.isNullOrBlank()
                                 lastTs = m.child("timestamp").getValue(Long::class.java) ?: 0L
                                 lastSender = m.child("sender").getValue(String::class.java) ?: ""
+                                isRead = m.child("isRead").getValue(Boolean::class.java) ?: true
                             }
 
                             stationMap[id]?.let { prev ->
                                 stationMap[id] = prev.copy(
                                     lastMessage = lastText,
                                     timestamp = lastTs,
-                                    lastSender = lastSender
+                                    lastSender = lastSender,
+                                    isRead = isRead,
+                                    hasImage = hasImage,
+                                    hasAudio = hasAudio,
+                                    hasUnreadAdminReply = (!isRead && lastSender.equals("admin", ignoreCase = true))
                                 )
                                 pushListUpdate()
                             }
                         }
-
-                        override fun onCancelled(error: DatabaseError) { /* ignore */ }
+                        override fun onCancelled(error: DatabaseError) {}
                     }
+
 
                     lastMsgQuery.addValueEventListener(msgListener)
                     lastMsgListeners[id] = lastMsgQuery to msgListener
                 }
 
-                // Initial draw
                 pushListUpdate()
             }
 

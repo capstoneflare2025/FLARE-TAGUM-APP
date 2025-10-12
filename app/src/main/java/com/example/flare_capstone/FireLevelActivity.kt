@@ -619,7 +619,7 @@ class FireLevelActivity : AppCompatActivity() {
 
                                 onReportStoredSuccess(
                                     currentTime,
-                                    "Report submitted to central and nearest: ${nearest.name}"
+                                    "Report submitted Please wait for responder"
                                 )
                             }
 

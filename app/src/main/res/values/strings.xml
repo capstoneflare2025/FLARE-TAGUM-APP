@@ -60,5 +60,31 @@
     <string name="main_tagline">Report fires and emergencies quickly.</string>
 
 
+    <!-- Categories shown in the first dropdown -->
+    <string-array name="category_options">
+        <item>Fire Report</item>
+        <item>Emergency Medical Services</item>
+        <item>Other Emergency</item>
+    </string-array>
+
+    <!-- Details for each category (from your screenshot/database) -->
+    <string-array name="fire_report_options">
+        <item>House on Fire</item>
+        <item>Business Establishment</item>
+        <item>Vehicle on Fire</item>
+        <item>Grass/Forest/Garbage on Fire</item>
+        <item>Post on Fire</item>
+    </string-array>
+
+    <string-array name="ems_options">
+        <item>Vehicular Accident</item>
+        <item>Patient Transport</item>
+    </string-array>
+
+    <string-array name="other_emergency_options">
+        <item>Collapsed Structure</item>
+        <item>Flood</item>
+        <item>Hazardous Material (e.g. Gas Leak)</item>
+    </string-array>
 
 </resources>

@@ -7,7 +7,7 @@
 
     <item
         android:id="@+id/inboxFragmentFireFighter"
-        android:icon="@drawable/ic_inbox_24"
+        android:icon="@drawable/message"
         android:title="Inbox" />
 
 

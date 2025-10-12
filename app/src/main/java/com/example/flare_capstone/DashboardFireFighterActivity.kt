@@ -40,7 +40,10 @@ class DashboardFireFighterActivity : AppCompatActivity() {
 
         // Legacy single-channel id (we’ll delete it)
         const val OLD_CHANNEL_ID = "ff_incidents"
+
+        const val CH_MSG  = "ff_admin_msg"   // 👈 new: admin chat messages
     }
+
 
     private lateinit var binding: ActivityDashboardFireFighterBinding
     private lateinit var database: FirebaseDatabase
@@ -55,6 +58,11 @@ class DashboardFireFighterActivity : AppCompatActivity() {
     // Dedupe + lifecycle
     private val shownKeys = mutableSetOf<String>()               // "$path::$id"
     private val liveListeners = mutableListOf<Pair<Query, ChildEventListener>>()
+    private val liveValueListeners = mutableListOf<Pair<DatabaseReference, ValueEventListener>>()
+
+
+    private var unreadAdminCount = 0
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,6 +100,11 @@ class DashboardFireFighterActivity : AppCompatActivity() {
 
         // Handle tap from a notification when app is cold-started
         handleIntent(intent)
+
+        stationAccountKey?.let { acct ->
+            watchAdminUnreadCount(acct)
+            listenAdminMessagesForNotifications(acct)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -99,6 +112,177 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         setIntent(intent)
         handleIntent(intent)
     }
+
+
+    private fun watchAdminUnreadCount(accountKey: String) {
+        val path = "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/$accountKey/AdminMessages"
+        val ref = database.getReference(path)
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                var cnt = 0
+                snapshot.children.forEach { msgSnap ->
+                    val sender = msgSnap.child("sender").getValue(String::class.java) ?: ""
+                    val isRead = msgSnap.child("isRead").getValue(Boolean::class.java) ?: true
+                    if (sender.equals("admin", ignoreCase = true) && !isRead) cnt++
+                }
+                unreadAdminCount = cnt
+                updateInboxBadge(cnt)
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        }
+
+        ref.addValueEventListener(listener)
+        liveValueListeners += (ref to listener)
+    }
+
+    /** Listen for new unread admin messages and show a notification once per message id. */
+    private fun listenAdminMessagesForNotifications(accountKey: String) {
+        val path = "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/$accountKey/AdminMessages"
+        val ref  = database.getReference(path)
+
+        // First pass: find the newest timestamp so we don't notify historical messages.
+        ref.orderByChild("timestamp").limitToLast(200)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    var baseTs = 0L
+                    snapshot.children.forEach { c ->
+                        val ts = c.child("timestamp").getValue(Long::class.java) ?: 0L
+                        if (ts > baseTs) baseTs = ts
+                    }
+                    attachAdminRealtime(ref, baseTs) // now attach realtime
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    attachAdminRealtime(ref, 0L) // fallback
+                }
+            })
+    }
+
+
+    private fun attachAdminRealtime(ref: DatabaseReference, baseTsMs: Long) {
+        val l = object : ChildEventListener {
+            @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+            override fun onChildAdded(snap: DataSnapshot, prev: String?) {
+                handleAdminMessageSnap(snap, baseTsMs)
+            }
+            @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+            override fun onChildChanged(snap: DataSnapshot, prev: String?) {
+                // If admin edits something from unread → still unread, you could notify.
+                // Usually we only notify on add, but harmless to handle here too:
+                handleAdminMessageSnap(snap, baseTsMs)
+            }
+            override fun onChildRemoved(snap: DataSnapshot) {}
+            override fun onChildMoved(snap: DataSnapshot, prev: String?) {}
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addChildEventListener(l)
+        liveListeners += (ref to l)
+    }
+
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private fun handleAdminMessageSnap(snap: DataSnapshot, baseTsMs: Long) {
+        val id = snap.key ?: return
+        val sender = snap.child("sender").getValue(String::class.java) ?: ""
+        val isRead = snap.child("isRead").getValue(Boolean::class.java) ?: false
+        val ts     = snap.child("timestamp").getValue(Long::class.java) ?: 0L
+
+        // Only notify: admin + unread + newer than base + not shown before
+        if (!sender.equals("admin", ignoreCase = true)) return
+        if (isRead) return
+        if (ts <= baseTsMs) return
+
+        val key = "adminmsg::$id"
+        if (alreadyShown(key)) return
+
+        showAdminMessageNotification(snap)
+        markShown(key)
+    }
+
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private fun showAdminMessageNotification(snap: DataSnapshot) {
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) return
+
+        val messageText = snap.child("text").getValue(String::class.java)
+        val hasImage    = snap.hasChild("imageBase64")
+        val hasAudio    = snap.hasChild("audioBase64")
+
+        // Build a compact preview
+        val preview = when {
+            !messageText.isNullOrBlank() -> messageText
+            hasImage -> "Admin sent a photo"
+            hasAudio -> "Admin sent a voice message"
+            else -> "New message from Admin"
+        }
+
+        // Open the chat screen directly
+        val intent = Intent(this, FireFighterResponseActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("from_notification_admin", true)
+            // FireFighterResponseActivity already resolves account by email,
+            // so extras are optional. Add if your activity expects something.
+        }
+        val reqCode = ("adminmsg::${snap.key}").hashCode()
+        val pending = PendingIntent.getActivity(
+            this, reqCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(this, CH_MSG)
+            .setSmallIcon(R.drawable.ic_logo)
+            .setContentTitle("New message from Admin")
+            .setContentText(preview)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(preview))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(pending)
+
+        try {
+            val notifId = ("adminmsg::${snap.key}").hashCode()
+            NotificationManagerCompat.from(this).notify(notifId, builder.build())
+            Log.d(TAG, "NOTIFY(admin) id=$notifId msg=$preview")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "POST_NOTIFICATIONS not granted: ${e.message}")
+        }
+    }
+
+
+    private fun updateInboxBadge(count: Int) {
+        // Suppose your bottom nav ID is R.id.inbox or similar
+        val menu = binding.bottomNavigationFirefighter.menu
+        val inboxItem = menu.findItem(R.id.inboxFragmentFireFighter) // adjust your ID
+        if (inboxItem != null) {
+            if (count > 0) {
+                // show badge
+                val badge = binding.bottomNavigationFirefighter.getOrCreateBadge(R.id.inboxFragmentFireFighter)
+                badge.isVisible = true
+                badge.number = count
+            } else {
+                binding.bottomNavigationFirefighter.removeBadge(R.id.inboxFragmentFireFighter)
+            }
+        }
+    }
+
+    // Call this when user opens the station's chat
+    fun markStationAdminRead(stationId: String) {
+        val path = "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/$stationAccountKey/AdminMessages"
+        val ref = database.getReference(path)
+        ref.orderByChild("sender").equalTo("admin")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snap: DataSnapshot) {
+                    for (msg in snap.children) {
+                        val isRead = msg.child("isRead").getValue(Boolean::class.java) ?: true
+                        if (!isRead) {
+                            msg.ref.child("isRead").setValue(true)
+                        }
+                    }
+                }
+                override fun onCancelled(err: DatabaseError) {}
+            })
+    }
+
 
     /* -------------------- Email → Account Key -------------------- */
 
@@ -316,6 +500,14 @@ class DashboardFireFighterActivity : AppCompatActivity() {
             soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), // system default
             useDefault = true
         )
+
+        recreateChannel(
+            id = CH_MSG,
+            name = "Firefighter • Admin Messages",
+            soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), // or a custom raw if you want
+            useDefault = true
+        )
+
     }
 
     private fun recreateChannel(id: String, name: String, soundUri: Uri?, useDefault: Boolean) {
@@ -447,6 +639,9 @@ class DashboardFireFighterActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         liveListeners.forEach { (q, l) -> q.removeEventListener(l) }
+        liveValueListeners.forEach { (ref, l) -> ref.removeEventListener(l) }
         liveListeners.clear()
+        liveValueListeners.clear()
     }
+
 }

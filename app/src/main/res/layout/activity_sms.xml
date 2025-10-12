@@ -7,7 +7,6 @@
     android:padding="16dp"
     android:background="@drawable/bg_onboarding_gradient">
 
-    <!-- Logo -->
     <ImageView
         android:id="@+id/logo"
         android:layout_width="120dp"
@@ -19,7 +18,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="24dp" />
 
-    <!-- Hint under logo -->
     <TextView
         android:id="@+id/tv_back_home"
         android:layout_width="wrap_content"
@@ -37,7 +35,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Scrollable content -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -53,7 +50,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Pretty form card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -62,10 +58,9 @@
                 app:strokeColor="?attr/colorOutline"
                 app:strokeWidth="1dp">
 
-                <!-- Keep original container ID so your code still finds it -->
                 <LinearLayout
-                    android:background="@color/background_sms"
                     android:id="@+id/curved_container"
+                    android:background="@color/background_sms"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
@@ -79,7 +74,6 @@
                         android:hint="Name"
                         app:endIconMode="clear_text">
 
-                        <!-- Keep original EditText ID -->
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/name"
                             android:background="@drawable/input_field_bg"
@@ -89,10 +83,7 @@
                             android:maxLines="1" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- Spacing -->
-                    <Space
-                        android:layout_width="1dp"
-                        android:layout_height="12dp" />
+                    <Space android:layout_width="1dp" android:layout_height="12dp" />
 
                     <!-- Location -->
                     <com.google.android.material.textfield.TextInputLayout
@@ -111,41 +102,44 @@
                             android:maxLines="1" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <Space
-                        android:layout_width="1dp"
-                        android:layout_height="12dp" />
+                    <Space android:layout_width="1dp" android:layout_height="12dp" />
 
-                    <!-- Fire Report -->
+                    <!-- Category dropdown -->
                     <com.google.android.material.textfield.TextInputLayout
-                        style="@style/Widget.Material3.TextInputLayout.FilledBox"
+                        style="@style/Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu"
+                        android:id="@+id/tilCategory"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Fire report details"
-                        app:counterEnabled="true"
-                        app:counterMaxLength="400">
+                        android:hint="Category">
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/fireReport"
-                            android:background="@drawable/input_field_bg"
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/categoryDropdown"
                             android:layout_width="match_parent"
-                            android:layout_height="150dp"
-                            android:gravity="top|start"
-                            android:inputType="textMultiLine"
-                            android:lines="5"
-                            android:maxLength="400"
-                            android:scrollbars="vertical" />
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false"
+                            android:clickable="true" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- Helper text -->
-                    <TextView
+                    <Space android:layout_width="1dp" android:layout_height="12dp" />
+
+                    <!-- Details dropdown -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu"
+                        android:id="@+id/tilDetails"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Include: when did the fire start, how many houses affected, and nearest landmark."
-                        android:textSize="12sp"
-                        android:textColor="?attr/colorOnSurfaceVariant"
-                        android:layout_marginTop="6dp" />
+                        android:hint="Details">
 
-                    <!-- Send -->
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/detailsDropdown"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false"
+                            android:clickable="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/sendReport"
                         android:layout_width="match_parent"
@@ -158,14 +152,10 @@
                         app:iconPadding="8dp"
                         android:backgroundTint="#E00024"
                         android:layout_marginTop="16dp" />
-
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Bottom breathing space for small screens -->
-            <Space
-                android:layout_width="1dp"
-                android:layout_height="24dp" />
+            <Space android:layout_width="1dp" android:layout_height="24dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

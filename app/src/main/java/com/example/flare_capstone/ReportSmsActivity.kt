@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.telephony.SmsManager
 import android.telephony.TelephonyManager
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AlertDialog
@@ -45,31 +46,24 @@ class ReportSmsActivity : AppCompatActivity() {
     private val station = FireStation(
         name = "Tagum City Central Fire Station",
         contact = "09635741233",
-        latitude = 7.4217617292640785,      // same as Canocotan (as you said—don’t mind)
+        latitude = 7.4217617292640785,
         longitude = 125.79018416901866
     )
 
     // CapstoneFlare stations (for nearest computation ONLY)
     private val capstoneStations = listOf(
-        FireStation(
-            name = "Canocotan Fire Station",
-            contact = "", // unknown; optional
-            latitude = 7.4217617292640785,
-            longitude = 125.79018416901866
-        ),
-        FireStation(
-            name = "Mabini Fire Station",
-            contact = "",
-            latitude = 7.450150854535532,
-            longitude = 125.79529166335233
-        ),
-        FireStation(
-            name = "La Filipina Fire Station",
-            contact = "",
-            latitude = 7.4768350720999655,
-            longitude = 125.8054726056261
-        )
+        FireStation("Canocotan Fire Station", "", 7.4217617292640785, 125.79018416901866),
+        FireStation("Mabini Fire Station", "", 7.450150854535532, 125.79529166335233),
+        FireStation("La Filipina Fire Station", "", 7.4768350720999655, 125.8054726056261)
     )
+
+    // Maps the human-readable station name to its RTDB node
+    private val stationNodeByName = mapOf(
+        "La Filipina Fire Station" to "CapstoneFlare/LaFilipinaFireStation",
+        "Canocotan Fire Station"   to "CapstoneFlare/CanocotanFireStation",
+        "Mabini Fire Station"      to "CapstoneFlare/MabiniFireStation"
+    )
+
 
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
     private val SMS_PERMISSION_REQUEST_CODE = 101
@@ -82,6 +76,13 @@ class ReportSmsActivity : AppCompatActivity() {
 
     private var tagumRings: List<List<LatLng>>? = null
     private var tagumLoaded = false
+
+    // Dropdown selections
+    private var selectedCategory: String? = null
+    private var selectedDetails: String? = null
+
+    val nowTimestamp = System.currentTimeMillis()
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,12 +113,37 @@ class ReportSmsActivity : AppCompatActivity() {
             Toast.makeText(this, "No SIM card detected. Cannot send SMS.", Toast.LENGTH_LONG).show()
         }
 
+        // ------------------ DROPDOWNS ------------------
+        val categories = resources.getStringArray(R.array.category_options)
+        val categoryAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, categories)
+        binding.categoryDropdown.setAdapter(categoryAdapter)
+
+        binding.categoryDropdown.setOnItemClickListener { _, _, pos, _ ->
+            selectedCategory = categories[pos]
+            val detailsArray = when (selectedCategory) {
+                "Fire Report" -> resources.getStringArray(R.array.fire_report_options)
+                "Emergency Medical Services" -> resources.getStringArray(R.array.ems_options)
+                "Other Emergency" -> resources.getStringArray(R.array.other_emergency_options)
+                else -> emptyArray()
+            }
+            val detailsAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, detailsArray)
+            binding.detailsDropdown.setAdapter(detailsAdapter)
+            binding.detailsDropdown.setText("")
+            selectedDetails = null
+        }
+
+        binding.detailsDropdown.setOnItemClickListener { _, _, pos, _ ->
+            selectedDetails = binding.detailsDropdown.adapter.getItem(pos).toString()
+        }
+        // ------------------------------------------------
+
         binding.sendReport.setOnClickListener {
             val name = binding.name.text.toString().trim()
             val location = binding.location.text.toString().trim()
-            val fireReport = binding.fireReport.text.toString().trim()
+            val category = selectedCategory
+            val details = selectedDetails
 
-            if (name.isEmpty() || location.isEmpty() || fireReport.isEmpty()) {
+            if (name.isEmpty() || location.isEmpty() || category.isNullOrEmpty() || details.isNullOrEmpty()) {
                 Toast.makeText(this, "Complete all fields.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -133,26 +159,26 @@ class ReportSmsActivity : AppCompatActivity() {
                     return@getCurrentLocation
                 }
 
-                // Compute nearest CapstoneFlare station (for message + DB metadata)
                 val (nearest, distMeters) = findNearestCapstoneStation(userLocation.latitude, userLocation.longitude)
+                val combinedDetails = "$category - $details"
 
                 val fullMessage = buildReportMessage(
                     name = name,
                     location = location,
-                    fireReport = fireReport,
-                    stationName = station.name,          // destination: CENTRAL
+                    fireReport = combinedDetails,
+                    stationName = station.name,
                     nearestName = nearest.name,
                     nearestMeters = distMeters
                 )
 
-                // Pass the central station to SMS; we’ll also save nearest info in the DB map
                 confirmSendSms(
                     phoneNumber = station.contact,
                     message = fullMessage,
                     userLocation = userLocation,
                     stationName = station.name,
                     nearestStationForDb = nearest,
-                    nearestDistanceMetersForDb = distMeters
+                    nearestDistanceMetersForDb = distMeters,
+                    combinedDetails = combinedDetails
                 )
             }
         }
@@ -198,8 +224,8 @@ class ReportSmsActivity : AppCompatActivity() {
         name: String,
         location: String,
         fireReport: String,
-        stationName: String,            // destination (central)
-        nearestName: String?,           // optional metadata
+        stationName: String,
+        nearestName: String?,
         nearestMeters: Long?
     ): String {
         val (date, time) = getCurrentDateTime()
@@ -229,10 +255,11 @@ class ReportSmsActivity : AppCompatActivity() {
         """.trimIndent()
     }
 
+    // Central storage (UNCHANGED path)
     // Central storage (UNCHANGED path), now with nearest info added into the map
     private fun uploadPendingReports(db: AppDatabase) {
         val dao = db.reportDao()
-        val ref = FirebaseDatabase.getInstance().reference
+        val centralRef = FirebaseDatabase.getInstance().reference
             .child("TagumCityCentralFireStation")
             .child("AllReport")
             .child("SmsReport")
@@ -241,7 +268,7 @@ class ReportSmsActivity : AppCompatActivity() {
             val pendingReports = dao.getPendingReports()
             for (report in pendingReports) {
 
-                // Compute nearest based on saved lat/lon
+                // Compute nearest based on saved lat/lon (you already had this)
                 var nearestName: String? = null
                 var nearestDist: Long? = null
                 if (report.latitude != 0.0 || report.longitude != 0.0) {
@@ -250,7 +277,8 @@ class ReportSmsActivity : AppCompatActivity() {
                     nearestDist = dist
                 }
 
-                val reportMap = mapOf(
+                // Build the payload (you already had this)
+                val reportMap = mutableMapOf(
                     "name" to report.name,
                     "location" to report.location,
                     "fireReport" to report.fireReport,
@@ -263,25 +291,52 @@ class ReportSmsActivity : AppCompatActivity() {
                     "status" to "Pending",
                     // Extra metadata fields for ops/triage:
                     "nearestStationName" to (nearestName ?: ""),
-                    "nearestStationDistanceMeters" to (nearestDist ?: -1L)
+                    "nearestStationDistanceMeters" to (nearestDist ?: -1L),
+
+                    "timestamp" to nowTimestamp         // ✅ new line added here
                 )
 
-                ref.push().setValue(reportMap)
+                // 1) Write to CENTRAL (existing behavior)
+                centralRef.push().setValue(reportMap)
                     .addOnSuccessListener {
-                        CoroutineScope(Dispatchers.IO).launch { dao.deleteReport(report.id) }
+                        // 2) ALSO write to NEAREST station if we can resolve the node
+                        val nearestNode = nearestName?.let { stationNodeByName[it] }
+                        if (!nearestNode.isNullOrBlank()) {
+                            // For the copy, set fireStationName to the nearest station’s name
+                            val nearestPayload = reportMap.toMutableMap().apply {
+                                this["fireStationName"] = nearestName
+                            }
+                            FirebaseDatabase.getInstance().reference
+                                .child(nearestNode)
+                                .child("AllReport")
+                                .child("SmsReport")
+                                .push()
+                                .setValue(nearestPayload)
+                                // We don’t block cleanup on this second write.
+                                .addOnCompleteListener {
+                                    CoroutineScope(Dispatchers.IO).launch { dao.deleteReport(report.id) }
+                                }
+                        } else {
+                            // No known node for that name — still clean up the local pending row
+                            CoroutineScope(Dispatchers.IO).launch { dao.deleteReport(report.id) }
+                        }
+                    }
+                    .addOnFailureListener {
+                        // Keep the local pending row so it can retry later
                     }
             }
         }
     }
 
-    // --- DATE AND TIME FORMAT FIX ---
+
     private fun getCurrentDateTime(): Pair<String, String> {
-        // Date in MM-dd-yyyy format and time in 24-hour format HH:mm:ss
-        val dateFormat = SimpleDateFormat("MM-dd-yyyy", Locale.getDefault())
+        // Date in MM/dd/yyyy (e.g., 10/13/2025) and time in 24-hour HH:mm:ss
+        val dateFormat = SimpleDateFormat("MM/dd/yyyy", Locale.getDefault())
         val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val now = Date()
         return Pair(dateFormat.format(now), timeFormat.format(now))
     }
+
 
     private fun isInternetAvailable(): Boolean {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -326,7 +381,8 @@ class ReportSmsActivity : AppCompatActivity() {
         userLocation: Location,
         stationName: String,
         nearestStationForDb: FireStation,
-        nearestDistanceMetersForDb: Long
+        nearestDistanceMetersForDb: Long,
+        combinedDetails: String
     ) {
         AlertDialog.Builder(this)
             .setTitle("Send Report")
@@ -334,8 +390,9 @@ class ReportSmsActivity : AppCompatActivity() {
             .setPositiveButton("Yes") { _, _ ->
                 val name = binding.name.text.toString().trim()
                 val locationText = binding.location.text.toString().trim()
-                val fireReport = binding.fireReport.text.toString().trim()
+                val fireReport = combinedDetails
                 val (date, time) = getCurrentDateTime()
+
 
                 val report = SmsReport(
                     name = name,
@@ -345,7 +402,7 @@ class ReportSmsActivity : AppCompatActivity() {
                     time = time,
                     latitude = userLocation.latitude,
                     longitude = userLocation.longitude,
-                    fireStationName = stationName    // keep central in local entity
+                    fireStationName = stationName
                 )
 
                 CoroutineScope(Dispatchers.IO).launch {

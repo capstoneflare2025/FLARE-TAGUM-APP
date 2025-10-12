@@ -547,7 +547,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
                                             )
                                         }
 
-                                        Toast.makeText(this, "Submitted to central and nearest: ${nearest.name}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this, "Report submitted Please wait for responder", Toast.LENGTH_SHORT).show()
                                         startActivity(Intent(this, DashboardActivity::class.java)); finish()
                                     }
                                 }
