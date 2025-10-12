@@ -12,6 +12,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.widget.addTextChangedListener
@@ -29,33 +30,34 @@ class InboxFragment : Fragment() {
     private var _binding: FragmentInboxBinding? = null
     private val binding get() = _binding!!
 
-    // Adapters
     private lateinit var responseMessageAdapter: ResponseMessageAdapter
-    private lateinit var storiesAdapter: StoriesAdapter
 
-    // Master + visible (filtered) lists
     private val allMessages = mutableListOf<ResponseMessage>()
     private val visibleMessages = mutableListOf<ResponseMessage>()
 
-    private enum class CategoryFilter { ALL, FIRE, OTHER }
-
-    // Default to FIRE category + All Fire Station selected
+    private enum class CategoryFilter { ALL, FIRE, OTHER, EMS, SMS }
     private var currentCategoryFilter: CategoryFilter = CategoryFilter.FIRE
-    private var selectedStation: String = "All Fire Station"
 
-    // Firebase
+    private var selectedStation: String = "Tagum City Central Fire Station"
+
     private lateinit var database: DatabaseReference
-    private val stationNodes = listOf("MabiniFireStation", "LaFilipinaFireStation", "CanocotanFireStation")
+    private val stationNodes = listOf("TagumCityCentralFireStation")
     private val liveListeners = mutableListOf<Pair<Query, ValueEventListener>>()
 
-    // Badge
+    // ✅ Exact category paths
+    private val FIRE_NODE  = "AllReport/FireReport"
+    private val OTHER_NODE = "AllReport/OtherEmergencyReport"
+    private val EMS_NODE   = "AllReport/EmergencyMedicalServicesReport"
+    private val SMS_NODE   = "AllReport/SmsReport"
+
     private var unreadMessageCount: Int = 0
 
-    // Read/Unread tabs
     private enum class FilterMode { ALL, READ, UNREAD }
     private var currentFilter: FilterMode = FilterMode.ALL
 
-    // Voice search
+    private fun normStation(s: String?): String =
+        (s ?: "").lowercase(Locale.getDefault()).replace(Regex("[^a-z0-9]"), "")
+
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -67,8 +69,7 @@ class InboxFragment : Fragment() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val speech = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val speech = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
                 ?.firstOrNull()
                 ?.trim()
                 .orEmpty()
@@ -90,7 +91,6 @@ class InboxFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         database = FirebaseDatabase.getInstance().reference
 
-        // Main list (messages)
         responseMessageAdapter = ResponseMessageAdapter(visibleMessages) {
             applyFilter()
             unreadMessageCount = allMessages.count { !it.isRead }
@@ -99,23 +99,6 @@ class InboxFragment : Fragment() {
         binding.recyclerView.layoutManager = LinearLayoutManager(context)
         binding.recyclerView.adapter = responseMessageAdapter
 
-        // Stories row
-        binding.storiesRecycler.apply {
-            layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
-            storiesAdapter = StoriesAdapter(mutableListOf()) { station ->
-                selectedStation = station
-                applyFilter()
-            }
-            adapter = storiesAdapter
-            overScrollMode = RecyclerView.OVER_SCROLL_NEVER
-        }
-        LinearSnapHelper().attachToRecyclerView(binding.storiesRecycler)
-        addStoryEdges()
-
-        // Default stations
-        storiesAdapter.setDefaultStations()
-
-        // Read/Unread tabs
         binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
                 currentFilter = when (tab.position) {
@@ -129,32 +112,29 @@ class InboxFragment : Fragment() {
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
 
-        // Default category = FIRE
-        binding.categoryChips.check(binding.chipFire.id)
-        currentCategoryFilter = CategoryFilter.FIRE
-        updateStoriesRow("")
-        applyFilter()
-
-        // Chip listeners
-        binding.categoryChips.setOnCheckedStateChangeListener { _, checkedIds ->
-            currentCategoryFilter = when {
-                checkedIds.contains(binding.chipFire.id)  -> CategoryFilter.FIRE
-                checkedIds.contains(binding.chipOther.id) -> CategoryFilter.OTHER
+        val categories = listOf(
+            "All Report",
+            "Fire Report",
+            "Other Emergency Report",
+            "Emergency Medical Services Report",
+            "Sms Report"
+        )
+        binding.categoryDropdown.setAdapter(
+            ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, categories)
+        )
+        binding.categoryDropdown.setText("All Report", false)
+        currentCategoryFilter = CategoryFilter.ALL
+        binding.categoryDropdown.setOnItemClickListener { _, _, pos, _ ->
+            currentCategoryFilter = when (pos) {
+                1 -> CategoryFilter.FIRE
+                2 -> CategoryFilter.OTHER
+                3 -> CategoryFilter.EMS
+                4 -> CategoryFilter.SMS
                 else -> CategoryFilter.ALL
             }
-            updateStoriesRow(binding.searchInput.text?.toString().orEmpty())
             applyFilter()
         }
-
-        // Search bar typing
-        binding.searchInput.addTextChangedListener { editable ->
-            updateStoriesRow(editable?.toString().orEmpty())
-        }
-
-        binding.searchBar.setOnClickListener {
-            focusAndShowKeyboard(binding.searchInput)
-        }
-
+        binding.searchBar.setOnClickListener { focusAndShowKeyboard(binding.searchInput) }
         binding.voiceBtn.setOnClickListener {
             micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
         }
@@ -162,32 +142,6 @@ class InboxFragment : Fragment() {
         loadUserAndAttach()
     }
 
-    private fun addStoryEdges() {
-        val side = resources.getDimensionPixelSize(R.dimen.story_edge_padding)
-        binding.storiesRecycler.addItemDecoration(object : RecyclerView.ItemDecoration() {
-            override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
-                val pos = parent.getChildAdapterPosition(view)
-                val last = (parent.adapter?.itemCount ?: 0) - 1
-                outRect.left = if (pos == 0) side else 0
-                outRect.right = if (pos == last) side else resources.getDimensionPixelSize(R.dimen.story_gap_between)
-            }
-        })
-    }
-
-    private fun updateStoriesRow(query: String) {
-        val stations = listOf(
-            "All Fire Station",
-            "LaFilipina Fire Station",
-            "Canocotan Fire Station",
-            "Mabini Fire Station"
-        )
-
-        val filtered = if (query.isBlank()) stations
-        else stations.filter { it.lowercase(Locale.ROOT).contains(query.lowercase(Locale.ROOT)) }
-
-        val items = filtered.map { StoryItem(it) }
-        storiesAdapter.setData(items, if (items.isEmpty()) "No matching stations" else null)
-    }
 
     private fun loadUserAndAttach() {
         val userEmail = FirebaseAuth.getInstance().currentUser?.email
@@ -223,48 +177,58 @@ class InboxFragment : Fragment() {
         visibleMessages.clear()
         responseMessageAdapter.notifyDataSetChanged()
         b.noMessagesText.visibility = View.VISIBLE
-
         updateInboxBadge(0)
 
         stationNodes.forEach { station ->
+            // ✅ Inbox list: TagumCityCentralFireStation/AllReport/ResponseMessage
             val q: Query = database.child(station)
+                .child("AllReport")
                 .child("ResponseMessage")
-                .orderByChild("contact")
-                .equalTo(userContact)
 
             val listener = object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val vb = _binding ?: return
                     var changed = false
 
+                    // 1) Remove prior rows for this station
+                    allMessages.removeAll { it.stationNode == station }
+
+                    // 2) Build incidentId -> newest message
+                    val latestByIncident = mutableMapOf<String, ResponseMessage>()
+
                     snapshot.children.forEach { node ->
                         val msg = node.getValue(ResponseMessage::class.java) ?: return@forEach
-                        msg.uid = node.key ?: ""
+                        msg.uid = node.key ?: msg.uid.orEmpty()
                         msg.stationNode = station
 
-                        if (msg.reporterName == userName || userName.isBlank()) {
-                            val idx = allMessages.indexOfFirst {
-                                it.incidentId == msg.incidentId && it.fireStationName == msg.fireStationName
-                            }
-                            if (idx == -1) {
-                                allMessages.add(0, msg)
-                                changed = true
-                                resolveCategoryForMessage(station, msg)
-                            } else {
-                                val oldTs = allMessages[idx].timestamp ?: 0L
-                                val newTs = msg.timestamp ?: 0L
-                                if (newTs > oldTs || allMessages[idx].isRead != msg.isRead) {
-                                    allMessages[idx] = msg
-                                    changed = true
-                                    resolveCategoryForMessage(station, msg)
-                                }
-                            }
+                        val incident = msg.incidentId?.trim().orEmpty()
+                        if (incident.isEmpty()) return@forEach
+
+                        // only the current user's rows
+                        val contactMatch = (msg.contact ?: "").trim() == userContact.trim()
+                        val nameMatch = (msg.reporterName ?: "").trim() == userName.trim()
+                        if (!contactMatch && !nameMatch) return@forEach
+
+                        val cur = latestByIncident[incident]
+                        if (cur == null || (msg.timestamp ?: 0L) > (cur.timestamp ?: 0L)) {
+                            latestByIncident[incident] = msg
                         }
                     }
 
-                    if (changed) {
-                        applyFilter()
+                    // 3) Append one row per incident
+                    if (latestByIncident.isNotEmpty()) {
+                        allMessages.addAll(latestByIncident.values)
+                        changed = true
                     }
+
+                    // 4) Resolve category only if unknown/not set
+                    latestByIncident.values.forEach { m ->
+                        if (m.category.isNullOrBlank() || m.category == "unknown") {
+                            resolveCategoryForMessage(station, m)
+                        }
+                    }
+
+                    if (changed) applyFilter()
 
                     vb.noMessagesText.visibility = if (visibleMessages.isEmpty()) View.VISIBLE else View.GONE
                     unreadMessageCount = allMessages.count { !it.isRead }
@@ -282,53 +246,63 @@ class InboxFragment : Fragment() {
     }
 
     private fun resolveCategoryForMessage(stationNode: String, msg: ResponseMessage) {
-        val threadId = msg.incidentId ?: msg.uid ?: return
+        // Always attempt to resolve if we're not already one of the four known buckets
+        if (msg.category in listOf("fire","other","ems","sms")) return
 
-        val fireNode = when (stationNode) {
-            "LaFilipinaFireStation" -> "LaFilipinaFireReport"
-            "CanocotanFireStation"  -> "CanocotanFireReport"
-            "MabiniFireStation"     -> "MabiniFireReport"
-            else -> null
-        }
-        val otherNode = when (stationNode) {
-            "LaFilipinaFireStation" -> "LaFilipinaOtherEmergency"
-            "CanocotanFireStation"  -> "CanocotanOtherEmergency"
-            "MabiniFireStation"     -> "MabiniOtherEmergency"
-            else -> null
-        }
+        val threadId = msg.incidentId ?: return   // use only the real incident id for lookup
+        msg.category = "unknown"                  // start unknown; UI will update when we set the real one
 
-        if (fireNode != null) {
-            database.child(stationNode).child(fireNode).child(threadId).child("messages")
-                .limitToFirst(1)
-                .addListenerForSingleValueEvent(object : ValueEventListener {
-                    override fun onDataChange(snap: DataSnapshot) {
-                        if (snap.exists() && snap.childrenCount > 0) {
-                            msg.category = "fire"
-                        } else if (otherNode != null) {
-                            database.child(stationNode).child(otherNode).child(threadId).child("messages")
-                                .limitToFirst(1)
-                                .addListenerForSingleValueEvent(object : ValueEventListener {
-                                    override fun onDataChange(s2: DataSnapshot) {
-                                        msg.category = if (s2.exists() && s2.childrenCount > 0) "other" else "unknown"
-                                        applyFilter()
-                                    }
-                                    override fun onCancelled(error: DatabaseError) {
-                                        msg.category = "unknown"
-                                        applyFilter()
-                                    }
-                                })
-                        } else {
-                            msg.category = "unknown"
-                        }
+        database.child(stationNode).child(FIRE_NODE).child(threadId).child("messages")
+            .limitToFirst(1).addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snap: DataSnapshot) {
+                    if (snap.exists() && snap.childrenCount > 0) {
+                        msg.category = "fire"
                         applyFilter()
+                    } else {
+                        database.child(stationNode).child(OTHER_NODE).child(threadId).child("messages")
+                            .limitToFirst(1).addListenerForSingleValueEvent(object : ValueEventListener {
+                                override fun onDataChange(s2: DataSnapshot) {
+                                    if (s2.exists() && s2.childrenCount > 0) {
+                                        msg.category = "other"
+                                        applyFilter()
+                                    } else {
+                                        database.child(stationNode).child(EMS_NODE).child(threadId).child("messages")
+                                            .limitToFirst(1).addListenerForSingleValueEvent(object : ValueEventListener {
+                                                override fun onDataChange(s3: DataSnapshot) {
+                                                    if (s3.exists() && s3.childrenCount > 0) {
+                                                        msg.category = "ems"
+                                                        applyFilter()
+                                                    } else {
+                                                        database.child(stationNode).child(SMS_NODE).child(threadId).child("messages")
+                                                            .limitToFirst(1).addListenerForSingleValueEvent(object : ValueEventListener {
+                                                                override fun onDataChange(s4: DataSnapshot) {
+                                                                    msg.category = if (s4.exists() && s4.childrenCount > 0) "sms" else "unknown"
+                                                                    applyFilter()
+                                                                }
+                                                                override fun onCancelled(error: DatabaseError) {
+                                                                    msg.category = "unknown"; applyFilter()
+                                                                }
+                                                            })
+                                                    }
+                                                }
+                                                override fun onCancelled(error: DatabaseError) {
+                                                    msg.category = "unknown"; applyFilter()
+                                                }
+                                            })
+                                    }
+                                }
+                                override fun onCancelled(error: DatabaseError) {
+                                    msg.category = "unknown"; applyFilter()
+                                }
+                            })
                     }
-                    override fun onCancelled(error: DatabaseError) {
-                        msg.category = "unknown"
-                        applyFilter()
-                    }
-                })
-        }
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    msg.category = "unknown"; applyFilter()
+                }
+            })
     }
+
 
     private fun applyFilter() {
         if (_binding == null) return
@@ -345,12 +319,13 @@ class InboxFragment : Fragment() {
                 CategoryFilter.ALL   -> true
                 CategoryFilter.FIRE  -> msg.category == "fire"
                 CategoryFilter.OTHER -> msg.category == "other"
+                CategoryFilter.EMS   -> msg.category == "ems"
+                CategoryFilter.SMS   -> msg.category == "sms"
             }
         }
 
         val filteredByStation = filteredByCategory.filter { msg ->
-            if (selectedStation == "All Fire Station") true
-            else msg.fireStationName == selectedStation
+            normStation(msg.fireStationName) == normStation(selectedStation)
         }
 
         visibleMessages.addAll(filteredByStation.sortedByDescending { it.timestamp ?: 0L })
@@ -362,11 +337,10 @@ class InboxFragment : Fragment() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a fire station name")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say station name")
         }
-        try {
-            voiceLauncher.launch(intent)
-        } catch (e: ActivityNotFoundException) {
+        try { voiceLauncher.launch(intent) }
+        catch (_: ActivityNotFoundException) {
             Toast.makeText(context, "Voice input not available on this device", Toast.LENGTH_SHORT).show()
         }
     }

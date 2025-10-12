@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.media.MediaRecorder
 import android.os.Bundle
 import android.provider.MediaStore
 import android.text.Editable
@@ -15,8 +16,6 @@ import android.util.Base64
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
-import android.media.MediaRecorder
-import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
@@ -54,7 +53,6 @@ class FireReportResponseActivity : AppCompatActivity() {
     private var isPaused = false
     private var pauseStartMs = 0L
 
-
     private var recordStartMs = 0L
     private val timerHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
@@ -68,32 +66,22 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
     }
 
-
     companion object {
         const val CAMERA_REQUEST_CODE = 100
         const val CAMERA_PERMISSION_REQUEST_CODE = 101
         const val GALLERY_REQUEST_CODE = 102
-
         const val TAG = "FireReportResponse"
+
+        // Station & nodes – locked to Tagum City Central
+        const val STATION_NODE = "TagumCityCentralFireStation"
+        const val FIRE_NODE = "AllReport/FireReport"
+        const val OTHER_NODE = "AllReport/OtherEmergencyReport"
+        const val EMS_NODE = "AllReport/EmergencyMedicalServicesReport"
     }
 
-    private val reportNodeByStationNode = mapOf(
-        "LaFilipinaFireStation" to "LaFilipinaFireReport",
-        "CanocotanFireStation"  to "CanocotanFireReport",
-        "MabiniFireStation"     to "MabiniFireReport"
-    )
-
-    private val stationNodeByDisplayName = mapOf(
-        "La Filipina Fire Station" to "LaFilipinaFireStation",
-        "Canocotan Fire Station"   to "CanocotanFireStation",
-        "Mabini Fire Station"      to "MabiniFireStation",
-        "LaFilipinaFireStation"    to "LaFilipinaFireStation",
-        "CanocotanFireStation"     to "CanocotanFireStation",
-        "MabiniFireStation"        to "MabiniFireStation"
-    )
-
-    private lateinit var stationNode: String
-    private lateinit var reportNode: String
+    // These are carried via Intent by the adapter; default to Fire Report if absent.
+    private var stationNode: String = STATION_NODE
+    private var reportNode: String = FIRE_NODE
 
     data class ChatMessage(
         var type: String? = null,
@@ -122,37 +110,27 @@ class FireReportResponseActivity : AppCompatActivity() {
         database = FirebaseDatabase.getInstance().reference
 
         uid = intent.getStringExtra("UID") ?: ""
-        fireStationName = intent.getStringExtra("FIRE_STATION_NAME") ?: ""
+        fireStationName = intent.getStringExtra("FIRE_STATION_NAME") ?: "Tagum City Central Fire Station"
         incidentId = intent.getStringExtra("INCIDENT_ID") ?: ""
         fromNotification = intent.getBooleanExtra("fromNotification", false)
 
-        val explicitStationNode = intent.getStringExtra("STATION_NODE")
-        val explicitReportNode = intent.getStringExtra("REPORT_NODE")
+        // station/report nodes (fallbacks locked to Tagum City Central)
+        stationNode = intent.getStringExtra("STATION_NODE") ?: STATION_NODE
+        reportNode = intent.getStringExtra("REPORT_NODE") ?: FIRE_NODE
 
-        stationNode = explicitStationNode ?: run {
-            Toast.makeText(this, "Station node missing!", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        reportNode = explicitReportNode ?: run {
-            Toast.makeText(this, "Report node missing!", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-
-        binding.fireStationName.text = fireStationName.ifEmpty { stationNode }
+        binding.fireStationName.text = fireStationName
 
         if (incidentId.isEmpty()) {
             Toast.makeText(this, "No Incident ID provided.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // IMPORTANT: Mark station responses as read if opened (from notif or from list)
+        // Mark station responses as read when opening a thread
         markStationResponsesAsReadOnOpen()
 
         attachMessagesListener()
 
-        binding.back.setOnClickListener { onBackPressed() }
+        binding.back.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
         binding.cameraIcon.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -166,30 +144,9 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
 
         binding.chatInputArea.layoutTransition?.enableTransitionType(android.animation.LayoutTransition.CHANGING)
-// 1) When the field gains focus, treat it like “typing mode”
+
         binding.messageInput.setOnFocusChangeListener { _, hasFocus ->
             setTypingUi(hasFocus || (binding.messageInput.text?.isNotBlank() == true))
-        }
-
-// 2) When text changes, toggle typing mode based on emptiness
-        binding.messageInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val hasText = !s.isNullOrBlank()
-                setTypingUi(hasText || binding.messageInput.hasFocus())
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-
-// 3) (Nice-to-have) Also react when the keyboard opens/closes
-        ViewCompat.setOnApplyWindowInsetsListener(binding.chatInputArea) { v, insets ->
-            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-            setTypingUi(imeVisible || binding.messageInput.text?.isNotBlank() == true)
-            insets
-        }
-
-        // expand when focused or has text
-        binding.messageInput.setOnFocusChangeListener { _, hasFocus ->
             setExpandedUi(hasFocus || (binding.messageInput.text?.isNotBlank() == true))
         }
 
@@ -197,40 +154,33 @@ class FireReportResponseActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val expanded = !s.isNullOrBlank() || binding.messageInput.hasFocus()
+                setTypingUi(expanded)
                 setExpandedUi(expanded)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
 
-// arrow tap → collapse to normal (keep text)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.chatInputArea) { _, insets ->
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            val expanded = imeVisible || binding.messageInput.text?.isNotBlank() == true
+            setTypingUi(expanded)
+            setExpandedUi(expanded)
+            insets
+        }
+
         binding.arrowBackIcon.setOnClickListener {
             binding.messageInput.clearFocus()
             binding.chatInputArea.hideKeyboard()
             setExpandedUi(false)
-            // (optional) also clear text:
-            // binding.messageInput.text?.clear()
         }
-
-// optional: react to keyboard open/close for smoother UX
-        ViewCompat.setOnApplyWindowInsetsListener(binding.chatInputArea) { _, insets ->
-            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-            setExpandedUi(imeVisible || binding.messageInput.text?.isNotBlank() == true)
-            insets
-        }
-
-
 
         binding.galleryIcon.setOnClickListener {
             val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
             startActivityForResult(intent, GALLERY_REQUEST_CODE)
         }
 
-        // when startRecording():
-        binding.voiceRecordIcon.setImageResource(R.drawable.ic_recording) // add a red mic asset
-
-// in stopRecordingAndPromptSend() finally:
-        binding.voiceRecordIcon.setImageResource(R.drawable.ic_record)   // back to idle mic
-
+        // mic icon visuals
+        binding.voiceRecordIcon.setImageResource(R.drawable.ic_record)
         binding.voiceRecordIcon.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -247,7 +197,6 @@ class FireReportResponseActivity : AppCompatActivity() {
         binding.recordPause.setOnClickListener { togglePauseResume() }
         binding.recordCancel.setOnClickListener { cancelRecording() }
         binding.recordSend.setOnClickListener { finishRecordingAndSend() }
-
 
         binding.sendButton.setOnClickListener {
             val userMessage = binding.messageInput.text.toString().trim()
@@ -298,7 +247,6 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
     }
 
-
     private fun startRecordingMessengerStyle() {
         try {
             recordFile = File.createTempFile("voice_", ".m4a", cacheDir)
@@ -313,11 +261,11 @@ class FireReportResponseActivity : AppCompatActivity() {
                 start()
             }
             isRecording = true
-            isPaused = false                // NEW
-            pauseStartMs = 0L               // NEW
+            isPaused = false
+            pauseStartMs = 0L
             recordStartMs = System.currentTimeMillis()
             binding.recordTimer.text = "00:00"
-            binding.recordPause.setImageResource(R.drawable.ic_pause)  // NEW
+            binding.recordPause.setImageResource(R.drawable.ic_pause)
             timerHandler.post(timerRunnable)
             showRecordBar(true)
         } catch (e: Exception) {
@@ -329,12 +277,10 @@ class FireReportResponseActivity : AppCompatActivity() {
 
     private fun togglePauseResume() {
         if (!isRecording) return
-
         if (android.os.Build.VERSION.SDK_INT < 24) {
             Toast.makeText(this, "Pause requires Android 7.0+", Toast.LENGTH_SHORT).show()
             return
         }
-
         try {
             if (!isPaused) {
                 recorder?.pause()
@@ -346,7 +292,7 @@ class FireReportResponseActivity : AppCompatActivity() {
                 recorder?.resume()
                 isPaused = false
                 val pausedDuration = System.currentTimeMillis() - pauseStartMs
-                recordStartMs += pausedDuration      // keep timer accurate
+                recordStartMs += pausedDuration
                 pauseStartMs = 0L
                 binding.recordPause.setImageResource(R.drawable.ic_pause)
                 timerHandler.post(timerRunnable)
@@ -356,15 +302,14 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
     }
 
-
     private fun cancelRecording() {
         try { recorder?.stop() } catch (_: Exception) {}
         cleanupRecorder()
         recordFile?.delete()
         recordFile = null
         isRecording = false
-        isPaused = false            // NEW
-        pauseStartMs = 0L           // NEW
+        isPaused = false
+        pauseStartMs = 0L
         timerHandler.removeCallbacks(timerRunnable)
         showRecordBar(false)
         Toast.makeText(this, "Recording discarded", Toast.LENGTH_SHORT).show()
@@ -375,8 +320,8 @@ class FireReportResponseActivity : AppCompatActivity() {
         try { recorder?.stop() } catch (_: Exception) {}
         cleanupRecorder()
         isRecording = false
-        isPaused = false            // NEW
-        pauseStartMs = 0L           // NEW
+        isPaused = false
+        pauseStartMs = 0L
         timerHandler.removeCallbacks(timerRunnable)
         showRecordBar(false)
 
@@ -395,7 +340,6 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
     }
 
-
     private fun cleanupRecorder() {
         try { recorder?.release() } catch (_: Exception) {}
         recorder = null
@@ -413,55 +357,43 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
     }
 
-
     private fun View.hideKeyboard() {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
     private fun setExpandedUi(expanded: Boolean) {
-        // camera & gallery hidden while expanded
         binding.cameraIcon.visibility = if (expanded) View.GONE else View.VISIBLE
         binding.galleryIcon.visibility = if (expanded) View.GONE else View.VISIBLE
         binding.voiceRecordIcon.visibility = if (expanded) View.GONE else View.VISIBLE
-
-        // arrow only when expanded (and placed BEFORE the EditText)
         binding.arrowBackIcon.visibility = if (expanded) View.VISIBLE else View.GONE
 
-        // send button state
         val hasText = binding.messageInput.text?.isNotBlank() == true
         binding.sendButton.isEnabled = hasText
         binding.sendButton.alpha = if (hasText) 1f else 0.4f
 
-        // give EditText more room while expanded
         binding.messageInput.maxLines = if (expanded) 5 else 3
     }
 
     private fun setTypingUi(isTyping: Boolean) {
-        // Hide or show the left-side icons
         binding.cameraIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
         binding.galleryIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
         binding.voiceRecordIcon.visibility = if (isTyping) View.GONE else View.VISIBLE
 
-        // Optionally show/hide (or dim) the send button
         val hasText = binding.messageInput.text?.isNotBlank() == true
         binding.sendButton.isEnabled = hasText
         binding.sendButton.alpha = if (hasText) 1f else 0.4f
 
-        // Let the EditText breathe a little more when typing
-        if (isTyping) {
-            binding.messageInput.maxLines = 5
-        } else {
-            binding.messageInput.maxLines = 3
-        }
+        binding.messageInput.maxLines = if (isTyping) 5 else 3
     }
-
 
     private fun messagesPath(): DatabaseReference =
         database.child(stationNode).child(reportNode).child(incidentId).child("messages")
 
     private fun markStationResponsesAsReadOnOpen() {
+        // Moved to AllReport/ResponseMessage
         val q = database.child(stationNode)
+            .child("AllReport")
             .child("ResponseMessage")
             .orderByChild("incidentId")
             .equalTo(incidentId)
@@ -473,14 +405,15 @@ class FireReportResponseActivity : AppCompatActivity() {
                     updates["${child.key}/isRead"] = true
                 }
                 if (updates.isNotEmpty()) {
-                    database.child(stationNode).child("ResponseMessage").updateChildren(updates)
+                    database.child(stationNode)
+                        .child("AllReport")
+                        .child("ResponseMessage")
+                        .updateChildren(updates)
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
         })
     }
-
-
 
     private fun attachMessagesListener() {
         messagesListener = object : ValueEventListener {
@@ -564,17 +497,27 @@ class FireReportResponseActivity : AppCompatActivity() {
         } catch (_: Exception) { null }
     }
 
-    // Write message under incident thread and mirror a summary under {StationNode}/ReplyMessage
-    private fun pushChatMessage(type: String, text: String, imageBase64: String) {
+    // single implementation (text + image + optional audio)
+    private fun pushChatMessage(
+        type: String,
+        text: String,
+        imageBase64: String,
+        audioBase64: String = ""
+    ) {
         val now = System.currentTimeMillis()
         val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(now))
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(now))
 
+        // normalize: only keep fields that have content
+        val textOrNull  = text.takeIf { it.isNotBlank() }
+        val imgOrNull   = imageBase64.takeIf { it.isNotBlank() }
+        val audOrNull   = audioBase64.takeIf { it.isNotBlank() }
+
         val msg = ChatMessage(
             type = type,
-            text = text,
-            imageBase64 = imageBase64.ifEmpty { null },
-            audioBase64 = null,
+            text = textOrNull,                 // null when no text
+            imageBase64 = imgOrNull,           // null when no image
+            audioBase64 = audOrNull,           // null when no audio
             uid = uid,
             reporterName = intent.getStringExtra("NAME") ?: "",
             date = date,
@@ -585,8 +528,7 @@ class FireReportResponseActivity : AppCompatActivity() {
 
         messagesPath().push().setValue(msg).addOnCompleteListener { t ->
             if (t.isSuccessful) {
-                // Mirror to /{StationNode}/ReplyMessage (for your “store all replies” list)
-                mirrorReplyUnderStationNode(msg)
+                mirrorReplyUnderStationNode(msg)   // also mirrors with only-present fields
                 Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
                 base64Image = ""
                 binding.messageInput.text.clear()
@@ -596,19 +538,25 @@ class FireReportResponseActivity : AppCompatActivity() {
         }
     }
 
+
     private fun mirrorReplyUnderStationNode(msg: ChatMessage) {
-        val map = hashMapOf<String, Any?>(
+        val map = mutableMapOf<String, Any?>(
             "fireStationName" to fireStationName,
-            "incidentId" to incidentId,
-            "reporterName" to msg.reporterName,
-            "contact" to null,
-            "replyMessage" to (msg.text ?: ""),
-            "imageBase64" to msg.imageBase64,
-            "timestamp" to (msg.timestamp ?: System.currentTimeMillis()),
-            "isRead" to true // citizen sent it; station can compute separate counters
+            "incidentId"      to incidentId,
+            "reporterName"    to msg.reporterName,
+            "contact"         to null,
+            "timestamp"       to (msg.timestamp ?: System.currentTimeMillis()),
+            "isRead"          to true
         )
-        database.child(stationNode).child("ReplyMessage").push().setValue(map)
+        msg.text?.let        { map["replyMessage"] = it }     // ONLY when text exists
+        msg.imageBase64?.let { map["imageBase64"]  = it }
+        msg.audioBase64?.let { map["audioBase64"]  = it }
+
+        database.child(stationNode).child("AllReport").child("ReplyMessage").push().setValue(map)
     }
+
+
+
 
     private fun dateTimeFallbackToMillis(date: String?, time: String?): Long {
         if (date.isNullOrEmpty() || time.isNullOrEmpty()) return 0L
@@ -631,7 +579,7 @@ class FireReportResponseActivity : AppCompatActivity() {
             displayUserMessage(item.key, item.msg.text.orEmpty(), bmp, isReply, item.timestamp)
             if (!(item.msg.isRead ?: false)) markAsRead(item.key)
         }
-        binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+        binding.scrollView.post { binding.scrollView.fullScroll(View.FOCUS_DOWN) }
     }
 
     private fun markAsRead(messageKey: String) {
@@ -752,8 +700,8 @@ class FireReportResponseActivity : AppCompatActivity() {
                 }
                 messageLayout.addView(timestampTextView)
                 binding.scrollContent.addView(messageLayout)
-                binding.scrollView.visibility = android.view.View.VISIBLE
-                binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+                binding.scrollView.visibility = View.VISIBLE
+                binding.scrollView.post { binding.scrollView.fullScroll(View.FOCUS_DOWN) }
             }
             .addOnFailureListener {
                 val formattedDateTime = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault()).format(Date(timestamp))
@@ -766,13 +714,13 @@ class FireReportResponseActivity : AppCompatActivity() {
                 }
                 messageLayout.addView(timestampTextView)
                 binding.scrollContent.addView(messageLayout)
-                binding.scrollView.visibility = android.view.View.VISIBLE
-                binding.scrollView.post { binding.scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+                binding.scrollView.visibility = View.VISIBLE
+                binding.scrollView.post { binding.scrollView.fullScroll(View.FOCUS_DOWN) }
             }
     }
 
     private fun showMessageOptionsPopup(
-        anchorView: android.view.View,
+        anchorView: View,
         key: String,
         currentMessage: String,
         isReply: Boolean,
@@ -840,39 +788,6 @@ class FireReportResponseActivity : AppCompatActivity() {
                 Toast.makeText(this, if (task.isSuccessful) "Message deleted" else "Failed to delete message", Toast.LENGTH_SHORT).show()
             }
     }
-
-
-    // change signature: add audioBase64 with default = ""
-    private fun pushChatMessage(type: String, text: String, imageBase64: String, audioBase64: String = "") {
-        val now = System.currentTimeMillis()
-        val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(now))
-        val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(now))
-
-        val msg = ChatMessage(
-            type = type,
-            text = text,
-            imageBase64 = imageBase64.ifEmpty { null },
-            audioBase64 = audioBase64.ifEmpty { null },   // <-- store audio here
-            uid = uid,
-            reporterName = intent.getStringExtra("NAME") ?: "",
-            date = date,
-            time = time,
-            timestamp = now,
-            isRead = false
-        )
-
-        messagesPath().push().setValue(msg).addOnCompleteListener { t ->
-            if (t.isSuccessful) {
-                mirrorReplyUnderStationNode(msg)
-                Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
-                base64Image = ""
-                binding.messageInput.text.clear()
-            } else {
-                Toast.makeText(this, "Error sending message.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
 
     override fun onDestroy() {
         super.onDestroy()

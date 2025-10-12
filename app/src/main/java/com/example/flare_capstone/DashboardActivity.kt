@@ -13,6 +13,7 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.TextView
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AlertDialog
@@ -20,7 +21,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.TaskStackBuilder
-import androidx.core.content.ContextCompat
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import com.example.flare_capstone.databinding.ActivityDashboardBinding
@@ -45,28 +45,25 @@ class DashboardActivity : AppCompatActivity() {
     private var loadingDialog: AlertDialog? = null
 
     /* ---------------- Firebase / Queries ---------------- */
-    private val stationNodes = listOf("LaFilipinaFireStation", "CanocotanFireStation", "MabiniFireStation")
+    // ✅ Single station
+    private val stationNode = "TagumCityCentralFireStation"
     private val responseListeners = mutableListOf<Pair<Query, ChildEventListener>>()
+    private val unreadCounterListeners = mutableListOf<Pair<Query, ValueEventListener>>()
 
     /* ---------------- Connectivity state gates ---------------- */
     private var isNetworkValidated = false
-    private var isNetworkSlow = true          // assume slow until measured
+    private var isNetworkSlow = true
     private var isInitialFirebaseReady = false
-
-    private val unreadCounterListeners = mutableListOf<Pair<Query, ValueEventListener>>()
-
 
     /* ---------------- Network Callback ---------------- */
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             runOnUiThread {
-                // Network appeared; wait for validation and speed check.
                 isNetworkValidated = false
                 isNetworkSlow = true
                 showLoadingDialog("Connecting… (waiting for internet)")
             }
         }
-
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
             runOnUiThread {
                 isNetworkValidated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
@@ -74,7 +71,6 @@ class DashboardActivity : AppCompatActivity() {
                 maybeHideLoading()
             }
         }
-
         override fun onLost(network: Network) {
             runOnUiThread {
                 isNetworkValidated = false
@@ -96,16 +92,12 @@ class DashboardActivity : AppCompatActivity() {
 
         connectivityManager = getSystemService(ConnectivityManager::class.java)
 
-        // Initial UI state depending on connectivity
         if (!isConnected()) {
             showLoadingDialog("No internet connection")
         } else {
             showLoadingDialog("Connecting…")
         }
-        // Listen for ongoing connectivity changes
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
-
-        // Keep dialog up until all gates pass
         showLoadingDialog()
 
         sharedPreferences = getSharedPreferences("shown_notifications", MODE_PRIVATE)
@@ -127,7 +119,6 @@ class DashboardActivity : AppCompatActivity() {
 
         createNotificationChannel()
 
-        // ---- Firebase bootstrap; only mark ready after we finish initial wiring ----
         fetchCurrentUserName { name ->
             if (name != null) {
                 currentUserName = name
@@ -139,17 +130,12 @@ class DashboardActivity : AppCompatActivity() {
                 startRealtimeUnreadCounter()
                 Log.e("UserCheck", "Failed to get current user name. Notifications will not be triggered.")
             }
-
-            // Mark the initial Firebase setup as complete (even if name is null; we've attempted it)
             isInitialFirebaseReady = true
             runOnUiThread { maybeHideLoading() }
         }
 
-        // If Firebase is taking long (likely slow internet), keep user informed
         binding.root.postDelayed({
-            if (!isInitialFirebaseReady) {
-                showLoadingDialog("Still loading data… (slow internet)")
-            }
+            if (!isInitialFirebaseReady) showLoadingDialog("Still loading data… (slow internet)")
         }, 10_000)
     }
 
@@ -164,9 +150,7 @@ class DashboardActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         try { connectivityManager.unregisterNetworkCallback(networkCallback) } catch (_: Exception) {}
-        responseListeners.forEach { (query, listener) ->
-            try { query.removeEventListener(listener) } catch (_: Exception) {}
-        }
+        responseListeners.forEach { (q, l) -> runCatching { q.removeEventListener(l) } }
         responseListeners.clear()
         stopRealtimeUnreadCounter()
     }
@@ -181,10 +165,9 @@ class DashboardActivity : AppCompatActivity() {
     }
 
     private fun isSlow(caps: NetworkCapabilities): Boolean {
-        // Heuristic: treat < 1.5 Mbps down OR < 512 Kbps up as slow.
         val down = caps.linkDownstreamBandwidthKbps
         val up = caps.linkUpstreamBandwidthKbps
-        if (down <= 0 || up <= 0) return true // unknown -> be conservative
+        if (down <= 0 || up <= 0) return true
         return down < 1500 || up < 512
     }
 
@@ -206,13 +189,29 @@ class DashboardActivity : AppCompatActivity() {
         if (loadingDialog == null) {
             val builder = AlertDialog.Builder(this)
             val dialogView = layoutInflater.inflate(R.layout.custom_loading_dialog, null)
+
+            // 🔒 Hide the Close button for DashboardActivity
+            dialogView.findViewById<TextView>(R.id.closeButton)?.apply {
+                visibility = View.GONE
+                isClickable = false
+            }
+
             builder.setView(dialogView)
             builder.setCancelable(false)
             loadingDialog = builder.create()
         }
+
         if (loadingDialog?.isShowing != true) loadingDialog?.show()
+
+        // Ensure it stays hidden even on reused dialog instances
+        loadingDialog?.findViewById<TextView>(R.id.closeButton)?.apply {
+            visibility = View.GONE
+            isClickable = false
+        }
+
         loadingDialog?.findViewById<TextView>(R.id.loading_message)?.text = message
     }
+
 
     private fun hideLoadingDialog() {
         loadingDialog?.dismiss()
@@ -241,18 +240,18 @@ class DashboardActivity : AppCompatActivity() {
         incidentId: String?,
         reporterName: String?,
         title: String,
-        stationNode: String
+        stationNodeParam: String // kept for intent extras; always TagumCityCentralFireStation
     ) {
-        val notificationId = (stationNode + "::" + messageId).hashCode()
-        val reportNode = reportNodeFor(stationNode)
+        val notificationId = (stationNodeParam + "::" + messageId).hashCode()
+        val reportNode = defaultReportNode() // points to AllReport/FireReport
 
         val resultIntent = Intent(this, FireReportResponseActivity::class.java).apply {
             putExtra("INCIDENT_ID", incidentId)
             putExtra("FIRE_STATION_NAME", fireStationName)
             putExtra("NAME", reporterName)
             putExtra("fromNotification", true)
-            putExtra("STATION_NODE", stationNode)
-            putExtra("REPORT_NODE", reportNode)
+            putExtra("STATION_NODE", stationNode)             // single node
+            putExtra("REPORT_NODE", reportNode)               // AllReport/FireReport by default
         }
 
         val pendingIntent = TaskStackBuilder.create(this).run {
@@ -276,17 +275,18 @@ class DashboardActivity : AppCompatActivity() {
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun triggerStatusChangeNotification(
         reportId: String,
-        stationNode: String,
+        stationNodeParam: String,
         reporterName: String,
         status: String
     ) {
-        val notificationId = (stationNode + "::" + reportId).hashCode()
+        val notificationId = (stationNodeParam + "::" + reportId).hashCode()
 
         val resultIntent = Intent(this, FireReportResponseActivity::class.java).apply {
             putExtra("REPORT_ID", reportId)
             putExtra("STATUS", status)
             putExtra("REPORTER_NAME", reporterName)
             putExtra("STATION_NODE", stationNode)
+            putExtra("REPORT_NODE", defaultReportNode())
         }
 
         val pendingIntent = TaskStackBuilder.create(this).run {
@@ -340,44 +340,29 @@ class DashboardActivity : AppCompatActivity() {
             return
         }
 
-        var total = 0
-        var pending = stationNodes.size
-        if (pending == 0) {
-            unreadMessageCount = 0
-            sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-            runOnUiThread { updateInboxBadge(unreadMessageCount) }
-            return
+        // ✅ Read under TagumCityCentralFireStation/AllReport/ResponseMessage
+        val baseRef = database.child(stationNode).child("AllReport").child("ResponseMessage")
+        val query: Query = if (myContact.isNotEmpty()) {
+            baseRef.orderByChild("contact").equalTo(myContact)
+        } else {
+            baseRef.orderByChild("reporterName").equalTo(myName)
         }
 
-        stationNodes.forEach { stationNode ->
-            val baseRef = database.child(stationNode).child("ResponseMessage")
-            val query: Query = if (myContact.isNotEmpty()) {
-                baseRef.orderByChild("contact").equalTo(myContact)
-            } else {
-                baseRef.orderByChild("reporterName").equalTo(myName)
+        query.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                var total = 0
+                snapshot.children.forEach { msg ->
+                    val isRead = msg.child("isRead").getValue(Boolean::class.java) ?: false
+                    if (!isRead) total++
+                }
+                unreadMessageCount = total
+                sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
+                runOnUiThread { updateInboxBadge(unreadMessageCount) }
             }
-
-            query.addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    snapshot.children.forEach { msg ->
-                        val isRead = msg.child("isRead").getValue(Boolean::class.java) ?: false
-                        if (!isRead) total++
-                    }
-                    if (--pending == 0) {
-                        unreadMessageCount = total
-                        sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-                        runOnUiThread { updateInboxBadge(unreadMessageCount) }
-                    }
-                }
-                override fun onCancelled(error: DatabaseError) {
-                    if (--pending == 0) {
-                        unreadMessageCount = total
-                        sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-                        runOnUiThread { updateInboxBadge(unreadMessageCount) }
-                    }
-                }
-            })
-        }
+            override fun onCancelled(error: DatabaseError) {
+                runOnUiThread { updateInboxBadge(unreadMessageCount) }
+            }
+        })
     }
 
     private fun listenForResponseMessages() {
@@ -388,59 +373,59 @@ class DashboardActivity : AppCompatActivity() {
         val myContact = user?.contact?.trim().orEmpty()
         if (myName.isEmpty() && myContact.isEmpty()) return
 
-        stationNodes.forEach { stationNode ->
-            val baseRef = database.child(stationNode).child("ResponseMessage")
-            val query: Query = if (myContact.isNotEmpty()) {
-                baseRef.orderByChild("contact").equalTo(myContact)
-            } else {
-                baseRef.orderByChild("reporterName").equalTo(myName)
-            }
-
-            val listener = object : ChildEventListener {
-                @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-                override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                    val messageId = snapshot.key ?: return
-                    val uniqueKey = "$stationNode::$messageId"
-
-                    val isRead = snapshot.child("isRead").getValue(Boolean::class.java) ?: false
-                    if (isRead || isNotificationShown(uniqueKey)) return
-
-                    val fireStationName = snapshot.child("fireStationName").getValue(String::class.java)
-                    val responseMessage = snapshot.child("responseMessage").getValue(String::class.java)
-                    val incidentId = snapshot.child("incidentId").getValue(String::class.java)
-                    val reporterName = snapshot.child("reporterName").getValue(String::class.java)
-
-                    if (reporterName == myName) {
-                        unreadMessageCount++
-                        sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-                        runOnUiThread { updateInboxBadge(unreadMessageCount) }
-
-                        triggerNotification(
-                            fireStationName = fireStationName,
-                            message = responseMessage,
-                            messageId = messageId,
-                            incidentId = incidentId,
-                            reporterName = reporterName,
-                            title = "New Response from $fireStationName",
-                            stationNode = stationNode
-                        )
-
-                        markNotificationAsShown(uniqueKey)
-                    }
-                }
-
-                override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
-                    updateUnreadMessageCount()
-                }
-
-                override fun onChildRemoved(snapshot: DataSnapshot) {}
-                override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
-                override fun onCancelled(error: DatabaseError) {}
-            }
-
-            query.addChildEventListener(listener)
-            responseListeners += query to listener
+        // ✅ Listen under AllReport/ResponseMessage
+        val baseRef = database.child(stationNode).child("AllReport").child("ResponseMessage")
+        val query: Query = if (myContact.isNotEmpty()) {
+            baseRef.orderByChild("contact").equalTo(myContact)
+        } else {
+            baseRef.orderByChild("reporterName").equalTo(myName)
         }
+
+        val listener = object : ChildEventListener {
+            @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                val messageId = snapshot.key ?: return
+                val uniqueKey = "$stationNode::$messageId"
+
+                val isRead = snapshot.child("isRead").getValue(Boolean::class.java) ?: false
+                if (isRead || isNotificationShown(uniqueKey)) return
+
+                val fireStationName = snapshot.child("fireStationName").getValue(String::class.java)
+                val responseMessage = snapshot.child("responseMessage").getValue(String::class.java)
+                val incidentId = snapshot.child("incidentId").getValue(String::class.java)
+                val reporterName = snapshot.child("reporterName").getValue(String::class.java)
+
+                // Only notify for my messages
+                if (reporterName == myName) {
+                    unreadMessageCount++
+                    sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
+                    runOnUiThread { updateInboxBadge(unreadMessageCount) }
+
+                    triggerNotification(
+                        fireStationName = fireStationName,
+                        message = responseMessage,
+                        messageId = messageId,
+                        incidentId = incidentId,
+                        reporterName = reporterName,
+                        title = "New Response from $fireStationName",
+                        stationNodeParam = stationNode
+                    )
+
+                    markNotificationAsShown(uniqueKey)
+                }
+            }
+
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
+                updateUnreadMessageCount()
+            }
+
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {}
+        }
+
+        query.addChildEventListener(listener)
+        responseListeners += query to listener
     }
 
     private fun isNotificationShown(key: String): Boolean =
@@ -451,55 +436,50 @@ class DashboardActivity : AppCompatActivity() {
     }
 
     /* =========================================================
-     * Firebase: Status Changes
+     * Firebase: Status Changes (watch FireReport under AllReport)
      * ========================================================= */
     private fun listenForStatusChanges() {
         val myName = currentUserName?.trim().orEmpty()
         if (myName.isEmpty()) return
 
-        stationNodes.forEach { stationNode ->
-            val baseRef = database.child(stationNode).child("FireReports")
+        val baseRef = database.child(stationNode).child("AllReport").child("FireReport")
 
-            baseRef.addChildEventListener(object : ChildEventListener {
-                @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-                override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                    val reportId = snapshot.key ?: return
-                    val reporterName = snapshot.child("reporterName").getValue(String::class.java) ?: return
-                    val status = snapshot.child("status").getValue(String::class.java)
+        baseRef.addChildEventListener(object : ChildEventListener {
+            @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                val reportId = snapshot.key ?: return
+                val reporterName = snapshot.child("reporterName").getValue(String::class.java) ?: return
+                val status = snapshot.child("status").getValue(String::class.java)
 
-                    if (reporterName == myName && status == "Ongoing") {
-                        triggerStatusChangeNotification(reportId, stationNode, reporterName, status ?: "Ongoing")
-                    }
+                if (reporterName == myName && status == "Ongoing") {
+                    triggerStatusChangeNotification(reportId, stationNode, reporterName, status ?: "Ongoing")
                 }
+            }
 
-                @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-                override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
-                    val reportId = snapshot.key ?: return
-                    val reporterName = snapshot.child("reporterName").getValue(String::class.java) ?: return
-                    val status = snapshot.child("status").getValue(String::class.java)
+            @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
+                val reportId = snapshot.key ?: return
+                val reporterName = snapshot.child("reporterName").getValue(String::class.java) ?: return
+                val status = snapshot.child("status").getValue(String::class.java)
 
-                    if (reporterName == myName && status == "Ongoing") {
-                        triggerStatusChangeNotification(reportId, stationNode, reporterName, status ?: "Ongoing")
-                    }
+                if (reporterName == myName && status == "Ongoing") {
+                    triggerStatusChangeNotification(reportId, stationNode, reporterName, status ?: "Ongoing")
                 }
+            }
 
-                override fun onChildRemoved(snapshot: DataSnapshot) {}
-                override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
-                override fun onCancelled(error: DatabaseError) {}
-            })
-        }
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
 
     /* =========================================================
      * Utilities
      * ========================================================= */
-    private fun reportNodeFor(stationNode: String): String {
-        return when (stationNode) {
-            "LaFilipinaFireStation" -> "LaFilipinaFireReport"
-            "CanocotanFireStation" -> "CanocotanFireReport"
-            "MabiniFireStation" -> "MabiniFireReport"
-            else -> "MabiniFireReport"
-        }
+    private fun defaultReportNode(): String {
+        // When opening the conversation view from a notification,
+        // default to FireReport under AllReport (your reader can switch as needed).
+        return "AllReport/FireReport"
     }
 
     private fun updateInboxBadge(count: Int) {
@@ -510,63 +490,47 @@ class DashboardActivity : AppCompatActivity() {
     }
 
     private fun startRealtimeUnreadCounter() {
-        // Guard: don’t double-attach
         if (unreadCounterListeners.isNotEmpty()) return
 
         val myContact = user?.contact?.trim().orEmpty()
         val myName = currentUserName?.trim().orEmpty()
         if (myContact.isEmpty() && myName.isEmpty()) {
-            // Nothing to watch
             updateInboxBadge(0)
             return
         }
 
-        // Keep a rolling total across stations; recomputed per station update
-        val latestCounts = mutableMapOf<String, Int>()
-
-        fun pushTotals() {
-            val total = latestCounts.values.sum()
-            unreadMessageCount = total
-            sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
-            runOnUiThread { updateInboxBadge(unreadMessageCount) }
+        // ✅ Watch AllReport/ResponseMessage for unread
+        val baseRef = database.child(stationNode).child("AllReport").child("ResponseMessage")
+        val query: Query = if (myContact.isNotEmpty()) {
+            baseRef.orderByChild("contact").equalTo(myContact)
+        } else {
+            baseRef.orderByChild("reporterName").equalTo(myName)
         }
 
-        stationNodes.forEach { stationNode ->
-            val baseRef = database.child(stationNode).child("ResponseMessage")
-            val query: Query = if (myContact.isNotEmpty()) {
-                baseRef.orderByChild("contact").equalTo(myContact)
-            } else {
-                baseRef.orderByChild("reporterName").equalTo(myName)
-            }
-
-            val v = object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    // Filter locally for unread since we can’t orderBy two fields
-                    var count = 0
-                    snapshot.children.forEach { msg ->
-                        val isRead = msg.child("isRead").getValue(Boolean::class.java) ?: false
-                        if (!isRead) count++
-                    }
-                    latestCounts[stationNode] = count
-                    pushTotals()
+        val v = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                var count = 0
+                snapshot.children.forEach { msg ->
+                    val isRead = msg.child("isRead").getValue(Boolean::class.java) ?: false
+                    if (!isRead) count++
                 }
-                override fun onCancelled(error: DatabaseError) {
-                    // If cancelled, treat this station as 0 so totals still make sense
-                    latestCounts[stationNode] = 0
-                    pushTotals()
-                }
+                unreadMessageCount = count
+                sharedPreferences.edit().putInt("unread_message_count", unreadMessageCount).apply()
+                runOnUiThread { updateInboxBadge(unreadMessageCount) }
             }
-
-            query.addValueEventListener(v)
-            unreadCounterListeners += query to v
+            override fun onCancelled(error: DatabaseError) {
+                runOnUiThread { updateInboxBadge(unreadMessageCount) }
+            }
         }
+
+        query.addValueEventListener(v)
+        unreadCounterListeners += query to v
     }
 
     private fun stopRealtimeUnreadCounter() {
         unreadCounterListeners.forEach { (q, v) ->
-            try { q.removeEventListener(v) } catch (_: Exception) {}
+            runCatching { q.removeEventListener(v) }
         }
         unreadCounterListeners.clear()
     }
-
 }

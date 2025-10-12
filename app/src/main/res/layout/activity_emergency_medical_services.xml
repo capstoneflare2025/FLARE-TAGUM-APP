@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:minHeight="56dp"
         app:titleCentered="true"
-        app:title="Other Emergency"
+        app:title="Emegency Medical Services"
         app:titleTextColor="#E00024"
         app:navigationIconTint="?attr/colorOnSurface"
         app:layout_constraintTop_toTopOf="parent"
@@ -54,16 +54,16 @@
                     android:orientation="vertical">
 
                     <TextView
-                        android:id="@+id/emergency_type_question"
+                        android:id="@+id/emergency_medical_services_type_question"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Select Emergency Involve"
+                        android:text="Select Emergency Medical Involve"
                         android:textStyle="bold"
                         android:textSize="16sp"
                         android:textColor="?attr/colorOnSurface"/>
 
                     <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/otherEmergencyDropdownLayout"
+                        android:id="@+id/emergencyMedicalServicesDropdownLayout"
                         style="@style/Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -71,7 +71,7 @@
                         android:layout_marginTop="10dp">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/otherEmergencyDropdown"
+                            android:id="@+id/emergencyMedicalServicesDropdown"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"

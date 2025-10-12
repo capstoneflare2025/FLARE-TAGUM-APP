@@ -32,9 +32,10 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         const val TAG = "FF-Notif"
         const val NOTIF_REQ_CODE = 9001
 
-        // One channel per type:
+        // One channel per type (added EMS):
         const val CH_FIRE  = "ff_fire"
         const val CH_OTHER = "ff_other"
+        const val CH_EMS   = "ff_ems"
         const val CH_SMS   = "ff_sms"
 
         // Legacy single-channel id (we’ll delete it)
@@ -45,8 +46,11 @@ class DashboardFireFighterActivity : AppCompatActivity() {
     private lateinit var database: FirebaseDatabase
     private lateinit var prefs: SharedPreferences
 
-    private var stationPrefix: String? = null
-    private var baseNode: String? = null
+    // Station account key mapping (e.g., "MabiniFireFighterAccount")
+    private var stationAccountKey: String? = null
+
+    // Realtime base: TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/<AccountKey>/AllReport
+    private var reportsBase: String? = null
 
     // Dedupe + lifecycle
     private val shownKeys = mutableSetOf<String>()               // "$path::$id"
@@ -65,25 +69,23 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         database = FirebaseDatabase.getInstance()
         prefs = getSharedPreferences("ff_notifs", MODE_PRIVATE)
 
+        // Map current user → station account key used by the new DB layout
         val email = FirebaseAuth.getInstance().currentUser?.email?.lowercase()
-        stationPrefix = when (email) {
-            "mabiniff001@gmail.com"     -> "Mabini"
-            "lafilipinaff001@gmail.com" -> "LaFilipina"
-            "canocotanff001@gmail.com"  -> "Canocotan"
-            else -> null
+        stationAccountKey = stationAccountForEmail(email)
+        reportsBase = stationAccountKey?.let {
+            "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/$it/AllReport"
         }
-        baseNode = stationPrefix?.let { "${it}FireStation" }
-        Log.d(TAG, "email=$email stationPrefix=$stationPrefix baseNode=$baseNode")
+        Log.d(TAG, "email=$email accountKey=$stationAccountKey base=$reportsBase")
 
-        createNotificationChannels()      // Fire/Other custom, SMS default sound
+        createNotificationChannels()      // Fire/Other custom, EMS shares OTHER, SMS default sound
         maybeRequestPostNotifPermission()
 
-        if (baseNode != null && stationPrefix != null) {
-            val base = baseNode!!
-            val pfx  = stationPrefix!!
-            listenOne("$base/${pfx}FireReport",     "New FIRE report")
-            listenOne("$base/${pfx}OtherEmergency", "New OTHER emergency")
-            listenOne("$base/${pfx}SmsReport",      "New SMS emergency")
+        if (reportsBase != null) {
+            val base = reportsBase!!
+            listenOne("$base/FireReport",                         "New FIRE report")
+            listenOne("$base/OtherEmergencyReport",               "New OTHER emergency")
+            listenOne("$base/EmergencyMedicalServicesReport",     "New EMS report")
+            listenOne("$base/SmsReport",                          "New SMS emergency")
         } else {
             Log.w(TAG, "No station mapped; not attaching Firebase listeners.")
         }
@@ -97,6 +99,38 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         setIntent(intent)
         handleIntent(intent)
     }
+
+    /* -------------------- Email → Account Key -------------------- */
+
+    private fun stationAccountForEmail(email: String?): String? {
+        val e = email ?: return null
+        return when (e) {
+            // Mabini
+            "mabini01@gmail.com",
+            "mabiniff01@gmail.com",
+            "mabiniff001@gmail.com" -> "MabiniFireFighterAccount"
+
+            // La Filipina
+            "lafilipinaff01@gmail.com",
+            "lafilipinaff001@gmail.com" -> "LaFilipinaFireFighterAccount"
+
+            // Canocotan (kept for completeness)
+            "canocotanff01@gmail.com",
+            "canocotanff001@gmail.com" -> "CanocotanFireFighterAccount"
+
+            else -> null
+        }
+    }
+
+    private fun friendlyStationLabel(): String {
+        return when (stationAccountKey) {
+            "MabiniFireFighterAccount"        -> "Mabini"
+            "LaFilipinaFireFighterAccount"    -> "La Filipina"
+            "CanocotanFireFighterAccount"     -> "Canocotan"
+            else -> "Unknown"
+        }
+    }
+
     /* -------------------- Firebase → Notification (once-per-id) -------------------- */
 
     private fun listenOne(path: String, title: String) {
@@ -173,17 +207,19 @@ class DashboardFireFighterActivity : AppCompatActivity() {
     /* -------------------- Notification builder -------------------- */
 
     private fun channelForPath(path: String): String = when {
-        path.endsWith("FireReport")      -> CH_FIRE
-        path.endsWith("OtherEmergency")  -> CH_OTHER
-        path.endsWith("SmsReport")       -> CH_SMS
-        else                             -> CH_OTHER
+        path.endsWith("FireReport")                          -> CH_FIRE
+        path.endsWith("OtherEmergencyReport")                -> CH_OTHER
+        path.endsWith("EmergencyMedicalServicesReport")      -> CH_EMS
+        path.endsWith("SmsReport")                           -> CH_SMS
+        else                                                 -> CH_OTHER
     }
 
     private fun sourceForPath(path: String): String = when {
-        path.endsWith("FireReport")      -> "FIRE"
-        path.endsWith("OtherEmergency")  -> "OTHER"
-        path.endsWith("SmsReport")       -> "SMS"
-        else                             -> "OTHER"
+        path.endsWith("FireReport")                          -> "FIRE"
+        path.endsWith("OtherEmergencyReport")                -> "OTHER"
+        path.endsWith("EmergencyMedicalServicesReport")      -> "EMS"
+        path.endsWith("SmsReport")                           -> "SMS"
+        else                                                 -> "OTHER"
     }
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
@@ -197,7 +233,7 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         val exactLocation = snap.child("exactLocation").getValue(String::class.java)
             ?: snap.child("location").getValue(String::class.java)
             ?: "Unknown location"
-        val message = "Station: $stationPrefix • $exactLocation"
+        val message = "Station: ${friendlyStationLabel()} • $exactLocation"
 
         val channelId = channelForPath(path)
         val srcStr = sourceForPath(path)
@@ -206,11 +242,11 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         val intent = Intent(this, DashboardFireFighterActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("from_notification", true)
-            putExtra("select_source", srcStr) // "FIRE" | "OTHER" | "SMS"
+            putExtra("select_source", srcStr) // "FIRE" | "OTHER" | "EMS" | "SMS"
             putExtra("select_id", id)         // Firebase child key
         }
 
-        // Use a unique requestCode per incident so extras are not reused
+        // Unique requestCode per incident so extras are not reused
         val reqCode = ("$path::$id").hashCode()
 
         val pending = PendingIntent.getActivity(
@@ -232,6 +268,7 @@ class DashboardFireFighterActivity : AppCompatActivity() {
             when (channelId) {
                 CH_FIRE  -> { builder.setSound(rawSoundUri(R.raw.fire_alert));  builder.setVibrate(longArrayOf(0, 600, 200, 600, 200, 600)) }
                 CH_OTHER -> { builder.setSound(rawSoundUri(R.raw.other_alert)); builder.setVibrate(longArrayOf(0, 400, 150, 400)) }
+                CH_EMS   -> { builder.setSound(rawSoundUri(R.raw.other_alert)); builder.setVibrate(longArrayOf(0, 400, 150, 400)) }
                 CH_SMS   -> { builder.setDefaults(NotificationCompat.DEFAULT_SOUND); builder.setVibrate(longArrayOf(0, 250, 120, 250, 120, 250)) }
             }
         }
@@ -245,7 +282,7 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         }
     }
 
-    /* -------------------- Channels (Fire/Other custom; SMS default) -------------------- */
+    /* -------------------- Channels (Fire/Other custom; EMS shares OTHER; SMS default) -------------------- */
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -265,6 +302,12 @@ class DashboardFireFighterActivity : AppCompatActivity() {
             id = CH_OTHER,
             name = "Firefighter • OTHER",
             soundUri = rawSoundUri(R.raw.other_alert),    // custom
+            useDefault = false
+        )
+        recreateChannel(
+            id = CH_EMS,
+            name = "Firefighter • EMS",
+            soundUri = rawSoundUri(R.raw.other_alert),    // reuse OTHER unless you add ems_alert
             useDefault = false
         )
         recreateChannel(
@@ -356,6 +399,7 @@ class DashboardFireFighterActivity : AppCompatActivity() {
     }
 
     // Optional helper to reset dedupe
+    @Suppress("unused")
     private fun debugClearDedupe() {
         Log.w(TAG, "debugClearDedupe called: clearing all stored keys")
         prefs.edit().clear().apply()
@@ -392,7 +436,7 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         supportFragmentManager.setFragmentResult(
             "select_incident",
             android.os.Bundle().apply {
-                putString("source", srcStr)
+                putString("source", srcStr) // "FIRE" | "OTHER" | "EMS" | "SMS"
                 putString("id", id)
             }
         )

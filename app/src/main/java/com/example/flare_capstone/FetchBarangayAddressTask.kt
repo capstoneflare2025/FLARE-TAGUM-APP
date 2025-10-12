@@ -11,7 +11,7 @@ import java.net.URL
 import java.net.URLEncoder
 
 class FetchBarangayAddressTask(
-    private val activity: Any, // FireLevelActivity or OtherEmergencyActivity
+    private val activity: Any, // FireLevelActivity, OtherEmergencyActivity, or EmergencyMedicalServicesActivity
     private val latitude: Double,
     private val longitude: Double
 ) : AsyncTask<Void, Void, String?>() {
@@ -50,12 +50,9 @@ class FetchBarangayAddressTask(
         val cClean = city?.trim()
         val finalBarangay = if (!bClean.isNullOrEmpty() && !cClean.isNullOrEmpty() && bClean.equals(cClean, true)) null else barangay
 
-        // 6) Compose result:
-        //    - If barangay is missing, DO NOT return only city. Return null so caller can handle.
+        // 6) Compose result (if barangay missing, return null so caller can handle)
         if (finalBarangay.isNullOrBlank()) return null
 
-        //    - If Purok exists: Purok, Barangay, City (omit nulls)
-        //    - Else: only Barangay + City (omit nulls)
         val parts = if (!purok.isNullOrBlank())
             listOfNotNull(purok, finalBarangay, city)
         else
@@ -67,8 +64,9 @@ class FetchBarangayAddressTask(
     override fun onPostExecute(result: String?) {
         super.onPostExecute(result)
         when (activity) {
-            is FireLevelActivity      -> activity.handleFetchedAddress(result)
+            is FireLevelActivity -> activity.handleFetchedAddress(result)
             is OtherEmergencyActivity -> activity.handleFetchedAddress(result)
+            is EmergencyMedicalServicesActivity -> activity.handleFetchedAddress(result) // <-- added
         }
     }
 
@@ -159,7 +157,7 @@ class FetchBarangayAddressTask(
         return bestName
     }
 
-    // ---------- NEW: Nominatim barangay fallback ----------
+    // ---------- Nominatim fallbacks ----------
     private fun queryBarangayFromNominatim(lat: Double, lon: Double): String? {
         val u = URL("https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lon&format=json&addressdetails=1&zoom=18")
         var conn: HttpURLConnection? = null
@@ -177,19 +175,17 @@ class FetchBarangayAddressTask(
             val body = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
             val addr = JSONObject(body).optJSONObject("address") ?: return null
 
-            // Common PH fields for barangay-equivalent
             val candidates = listOf("barangay", "city_district", "suburb", "village", "neighbourhood")
                 .mapNotNull { k -> addr.optString(k).takeIf { it.isNotBlank() } }
 
             candidates.firstOrNull { cand ->
-                Regex("(?i)\\b(brgy\\.?|barangay)\\b").containsMatchIn(cand) || // explicit
-                        !Regex("(?i)\\b(purok|zone|sitio|phase|block)\\b").containsMatchIn(cand) // avoid purok-ish
+                Regex("(?i)\\b(brgy\\.?|barangay)\\b").containsMatchIn(cand) ||
+                        !Regex("(?i)\\b(purok|zone|sitio|phase|block)\\b").containsMatchIn(cand)
             }
         } catch (e: Exception) { null }
         finally { conn?.disconnect() }
     }
 
-    // ---------- Nominatim: strict city fallback ----------
     private fun queryCityFromNominatim(lat: Double, lon: Double): String? {
         val u = URL("https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lon&format=json&addressdetails=1&zoom=16")
         var conn: HttpURLConnection? = null
@@ -213,7 +209,6 @@ class FetchBarangayAddressTask(
         finally { conn?.disconnect() }
     }
 
-    // ---------- NEW: Purok detection ----------
     private fun queryPurokFromNominatim(lat: Double, lon: Double): String? {
         val u = URL("https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lon&format=json&addressdetails=1&zoom=18")
         var conn: HttpURLConnection? = null
@@ -327,7 +322,7 @@ class FetchBarangayAddressTask(
     private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val R = 6371000.0
         val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lat2 - lon1)
+        val dLon = Math.toRadians(lon2 - lon1)
         val a = Math.sin(dLat/2)*Math.sin(dLat/2) +
                 Math.cos(Math.toRadians(lat1))*Math.cos(Math.toRadians(lat2)) *
                 Math.sin(dLon/2)*Math.sin(dLon/2)

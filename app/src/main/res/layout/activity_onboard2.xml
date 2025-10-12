@@ -31,7 +31,7 @@
         android:id="@+id/descriptionText"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="• Tap **Fire** to report a fire. Fill in details, then **Send** (or **Cancel**).\n\n• Tap **Other** to choose Flooding, Gas leak, Tree fall, etc. Then **Send** (or **Cancel**).\n\n• Tap **Vehicle Accident** to report road or car crashes, then **Send** (or **Cancel**)."
+        android:text="• Tap **Fire** to report a fire. Fill in details, then **Send** (or **Cancel**).\n\n• Tap **Other** to choose Flooding, Gas leak, Tree fall, etc. Then **Send** (or **Cancel**).\n\n"
         android:textSize="16sp"
         android:textColor="?attr/colorOnBackground"
         android:alpha="0.88"

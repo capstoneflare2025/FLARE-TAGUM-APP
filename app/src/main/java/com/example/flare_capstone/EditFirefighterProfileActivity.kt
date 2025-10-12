@@ -26,12 +26,13 @@ import java.io.ByteArrayOutputStream
 class EditFirefighterProfileActivity : AppCompatActivity() {
 
     companion object {
-        const val EXTRA_DB_PATH = "extra_db_path" // e.g. "MabiniFireStation/MabiniFireFighterAccount"
+        // e.g. "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/MabiniFireFighterAccount"
+        const val EXTRA_DB_PATH = "extra_db_path"
 
         private const val CAMERA_REQUEST_CODE = 201
         private const val CAMERA_PERMISSION_REQUEST_CODE = 202
-        private const val GALLERY_REQUEST_CODE = 204
         private const val GALLERY_PERMISSION_REQUEST_CODE = 203
+        private const val GALLERY_REQUEST_CODE = 204
     }
 
     private lateinit var binding: ActivityEditProfileBinding
@@ -69,12 +70,12 @@ class EditFirefighterProfileActivity : AppCompatActivity() {
 
         binding.back.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        // Email read-only
+        // Email is read-only
         binding.email.isFocusable = false
         binding.email.isFocusableInTouchMode = false
         binding.email.isClickable = false
 
-        // Hide current password fields (not needed here)
+        // Hide current password fields (unused here)
         binding.currentPassword.visibility = View.GONE
         binding.currentPasswordText.visibility = View.GONE
 
@@ -82,91 +83,91 @@ class EditFirefighterProfileActivity : AppCompatActivity() {
         binding.profileIcon.isClickable = true
         binding.profileIcon.setOnClickListener { showImageSourceSheet() }
 
-        // Load station firefighter record (single object with name/email/contact/profile)
-        dbRef.get().addOnSuccessListener { snap ->
-            hideLoadingDialog()
-            if (!snap.exists()) {
-                Toast.makeText(this, "Profile not found.", Toast.LENGTH_SHORT).show()
-                finish(); return@addOnSuccessListener
-            }
-
-            val name = snap.child("name").getValue(String::class.java).orEmpty()
-            val email = snap.child("email").getValue(String::class.java).orEmpty()
-            val contact = snap.child("contact").getValue(String::class.java).orEmpty()
-            val profileBase64 = snap.child("profile").getValue(String::class.java)
-
-            binding.name.setText(name)
-            binding.email.setText(email)
-            binding.contact.setText(contact)
-
-            val bmp = convertBase64ToBitmap(profileBase64)
-            if (bmp != null) {
-                binding.profileIcon.setImageBitmap(bmp)
-                hasProfileImage = true
-                base64ProfileImage = profileBase64
-            } else {
-                hasProfileImage = false
-                base64ProfileImage = null
-            }
-
-            binding.saveButton.setOnClickListener {
-                val newName = binding.name.text.toString().trim()
-                var newContact = binding.contact.text.toString().trim()
-
-                if (newName.isEmpty()) {
-                    binding.name.error = "Required"; return@setOnClickListener
+        // Load single firefighter object: { name, email, contact, profile(base64) }
+        dbRef.get()
+            .addOnSuccessListener { snap ->
+                hideLoadingDialog()
+                if (!snap.exists()) {
+                    Toast.makeText(this, "Profile not found.", Toast.LENGTH_SHORT).show()
+                    finish(); return@addOnSuccessListener
                 }
 
-                // Normalize 639xxxx → 09xxxx
-                if (newContact.startsWith("639")) {
-                    newContact = newContact.replaceFirst("639", "09")
-                    binding.contact.setText(newContact)
+                val name = snap.child("name").getValue(String::class.java).orEmpty()
+                val email = snap.child("email").getValue(String::class.java).orEmpty()
+                val contact = snap.child("contact").getValue(String::class.java).orEmpty()
+                val profileBase64 = snap.child("profile").getValue(String::class.java)
+
+                binding.name.setText(name)
+                binding.email.setText(email)
+                binding.contact.setText(contact)
+
+                val bmp = convertBase64ToBitmap(profileBase64)
+                if (bmp != null) {
+                    binding.profileIcon.setImageBitmap(bmp)
+                    hasProfileImage = true
+                    base64ProfileImage = profileBase64
+                } else {
+                    hasProfileImage = false
+                    base64ProfileImage = null
                 }
 
-                if (newContact.isNotEmpty() && !newContact.matches(Regex("^09\\d{9}$"))) {
-                    binding.contact.error = "Invalid number. Must start with 09 and have 11 digits."
-                    return@setOnClickListener
-                }
+                binding.saveButton.setOnClickListener {
+                    val newName = binding.name.text.toString().trim()
+                    var newContact = binding.contact.text.toString().trim()
 
-                // Build updates (email fixed/unchanged here)
-                val updates = mutableMapOf<String, Any>(
-                    "name" to newName,
-                    "contact" to newContact
-                )
-                if (base64ProfileImage != null && !removeProfileImageRequested) {
-                    updates["profile"] = base64ProfileImage!!
-                }
+                    if (newName.isEmpty()) {
+                        binding.name.error = "Required"; return@setOnClickListener
+                    }
 
-                showLoadingDialog("Saving…")
-                dbRef.updateChildren(updates)
-                    .addOnSuccessListener {
-                        if (removeProfileImageRequested) {
-                            dbRef.child("profile").removeValue()
-                                .addOnCompleteListener {
-                                    hideLoadingDialog()
-                                    Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
-                                    hasProfileImage = false
-                                    removeProfileImageRequested = false
-                                    base64ProfileImage = null
-                                }
-                        } else {
-                            hideLoadingDialog()
-                            Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
-                            hasProfileImage = base64ProfileImage != null
-                            removeProfileImageRequested = false
+                    // Normalize 639xxxxxx… → 09xxxxxx…
+                    if (newContact.startsWith("639")) {
+                        newContact = newContact.replaceFirst("639", "09")
+                        binding.contact.setText(newContact)
+                    }
+
+                    if (newContact.isNotEmpty() && !newContact.matches(Regex("^09\\d{9}$"))) {
+                        binding.contact.error = "Invalid number. Must start with 09 and have 11 digits."
+                        return@setOnClickListener
+                    }
+
+                    val updates = mutableMapOf<String, Any>(
+                        "name" to newName,
+                        "contact" to newContact
+                    )
+                    if (base64ProfileImage != null && !removeProfileImageRequested) {
+                        updates["profile"] = base64ProfileImage!!
+                    }
+
+                    showLoadingDialog("Saving…")
+                    dbRef.updateChildren(updates)
+                        .addOnSuccessListener {
+                            if (removeProfileImageRequested) {
+                                dbRef.child("profile").removeValue()
+                                    .addOnCompleteListener {
+                                        hideLoadingDialog()
+                                        Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
+                                        hasProfileImage = false
+                                        removeProfileImageRequested = false
+                                        base64ProfileImage = null
+                                    }
+                            } else {
+                                hideLoadingDialog()
+                                Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
+                                hasProfileImage = base64ProfileImage != null
+                                removeProfileImageRequested = false
+                            }
                         }
-                    }
-                    .addOnFailureListener { e ->
-                        hideLoadingDialog()
-                        Toast.makeText(this, "Update failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
+                        .addOnFailureListener { e ->
+                            hideLoadingDialog()
+                            Toast.makeText(this, "Update failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                }
             }
-
-        }.addOnFailureListener {
-            hideLoadingDialog()
-            Toast.makeText(this, "Failed to load profile: ${it.message}", Toast.LENGTH_SHORT).show()
-            finish()
-        }
+            .addOnFailureListener {
+                hideLoadingDialog()
+                Toast.makeText(this, "Failed to load profile: ${it.message}", Toast.LENGTH_SHORT).show()
+                finish()
+            }
     }
 
     override fun onDestroy() {

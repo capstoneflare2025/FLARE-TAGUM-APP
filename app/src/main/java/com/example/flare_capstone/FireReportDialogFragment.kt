@@ -1,8 +1,12 @@
 package com.example.flare_capstone
 
 import android.app.Dialog
+import android.graphics.Color
 import android.os.Bundle
+import android.text.method.LinkMovementMethod
 import android.view.*
+import android.view.ViewGroup.LayoutParams
+import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
 import com.example.flare_capstone.databinding.DialogFireReportBinding
 
@@ -17,18 +21,52 @@ class FireReportDialogFragment(private val report: FireReport) : DialogFragment(
         return dialog
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         _binding = DialogFireReportBinding.inflate(inflater, container, false)
 
-        binding.txtName.text = report.name
-        binding.txtContact.text = report.contact
-        binding.txtAlertLevel.text = report.alertLevel
-        binding.txtDate.text = "${report.date} ${report.reportTime}"
-        binding.txtStartTime.text = report.fireStartTime
-        binding.txtHouses.text = report.numberOfHousesAffected.toString()
-        binding.txtLocation.text = report.exactLocation
-        binding.txtStatus.text = report.status
+        // Header
+        binding.title.text = "Fire Report"
 
+        // Name / Contact
+        binding.txtName.text = report.name.orEmpty()
+        binding.txtContact.text = report.contact.orEmpty()
+
+        // Type
+        binding.txtType.text = report.type?.takeIf { it.isNotBlank() } ?: "Fire"
+
+        // Date - Time
+        val dateTime = listOfNotNull(
+            report.date?.takeIf { it.isNotBlank() },
+            report.reportTime?.takeIf { it.isNotBlank() }
+        ).joinToString("  ")
+        binding.txtDateTime.text = dateTime
+
+        // Location (prefer exactLocation; else map link; else "Unknown")
+        val locationText = when {
+            !report.exactLocation.isNullOrBlank() -> report.exactLocation!!.trim()
+            report.latitude != null && report.longitude != null ->
+                "https://www.google.com/maps?q=${report.latitude},${report.longitude}"
+            else -> "Unknown Location"
+        }
+        binding.txtLocation.text = locationText
+        binding.txtLocation.movementMethod = LinkMovementMethod.getInstance() // make autoLink clickable
+
+        // Status + simple color
+        val status = report.status?.trim().orEmpty()
+        binding.txtStatus.text = status
+        binding.txtStatus.setTextColor(
+            when (status.lowercase()) {
+                "Ongoing"   -> Color.parseColor("#E00024") // red
+                "Completed" -> Color.parseColor("#4CAF50") // green
+                else        -> Color.parseColor("#2196F3") // blue default
+            }
+        )
+
+        // Close
         binding.btnClose.setOnClickListener { dismiss() }
 
         return binding.root
@@ -36,11 +74,13 @@ class FireReportDialogFragment(private val report: FireReport) : DialogFragment(
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.setLayout(
-            (resources.displayMetrics.widthPixels * 0.90).toInt(),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog?.window?.apply {
+            setLayout(
+                (resources.displayMetrics.widthPixels * 0.90f).toInt(),
+                LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundDrawableResource(android.R.color.transparent)
+        }
     }
 
     override fun onDestroyView() {

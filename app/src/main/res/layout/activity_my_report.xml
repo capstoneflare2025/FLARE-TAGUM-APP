@@ -6,7 +6,6 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
-    <!-- Top App Bar -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/topBar"
         android:layout_width="0dp"
@@ -17,15 +16,14 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Keep your existing back ID -->
     <ImageView
         android:id="@+id/back"
-        android:layout_width="30dp"
-        android:layout_height="30dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
         android:src="@drawable/ic_backed"
         android:contentDescription="@string/content_desc_navigate_up"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="4dp"
+        android:padding="6dp"
         app:layout_constraintStart_toStartOf="@id/topBar"
         app:layout_constraintTop_toTopOf="@id/topBar"
         app:layout_constraintBottom_toBottomOf="@id/topBar" />
@@ -33,49 +31,84 @@
     <SearchView
         android:id="@+id/searchView"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="30dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_searchview_rounded"
         android:queryHint="Search reports..."
+        android:iconifiedByDefault="false"
+        android:inputType="text"
         android:theme="@style/BlackSearchViewTheme"
         app:layout_constraintTop_toBottomOf="@id/topBar"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- Filter options (RadioGroup for Fire Report or Other Emergency) -->
-    <RadioGroup
-        android:id="@+id/reportTypeRadioGroup"
-        android:layout_width="match_parent"
+    <!-- Filters: Type | Status | Date range -->
+    <LinearLayout
+        android:id="@+id/filterRow"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
         app:layout_constraintTop_toBottomOf="@id/searchView"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:orientation="horizontal">
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <RadioButton
-            android:id="@+id/allReportsRadioButton"
-            android:layout_width="wrap_content"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/typeLayout"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="All"
-            android:checked="true" />
+            android:layout_weight="1"
+            android:hint="Type"
+            app:endIconMode="dropdown_menu">
 
-        <RadioButton
-            android:id="@+id/fireReportRadioButton"
-            android:layout_width="wrap_content"
+            <AutoCompleteTextView
+                android:id="@+id/typeDropdown"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:inputType="none"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <Space android:layout_width="8dp" android:layout_height="1dp" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/statusLayout"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="15dp"
-            android:text="Fire Report"
-            />
+            android:layout_weight="1"
+            android:hint="Status"
+            app:endIconMode="dropdown_menu">
 
-        <RadioButton
-            android:id="@+id/otherEmergencyRadioButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginLeft="15dp"
-            android:text="Other Emergency" />
+            <AutoCompleteTextView
+                android:id="@+id/statusDropdown"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:inputType="none"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+        </com.google.android.material.textfield.TextInputLayout>
 
-    </RadioGroup>
+        <Space android:layout_width="8dp" android:layout_height="1dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/dateRangeBtn"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:textAllCaps="false"
+            android:text="Date range" />
+    </LinearLayout>
 
     <!-- Header row -->
     <LinearLayout
@@ -85,9 +118,9 @@
         android:layout_height="wrap_content"
         android:background="@drawable/bg_header_rounded"
         android:padding="12dp"
-        android:elevation="4dp"
-        android:layout_marginTop="30dp"
-        app:layout_constraintTop_toBottomOf="@id/reportTypeRadioGroup"
+        android:elevation="2dp"
+        android:layout_marginTop="8dp"
+        app:layout_constraintTop_toBottomOf="@id/filterRow"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -96,38 +129,44 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Date"
-            android:textColor="#000"
+            android:textColor="#000000"
             android:gravity="center"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"/>
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Alert"
-            android:textColor="#000"
+            android:text="Type"
+            android:textColor="#000000"
             android:gravity="center"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"/>
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Status"
-            android:textColor="#000"
+            android:textColor="#000000"
             android:gravity="center"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"/>
     </LinearLayout>
 
-    <!-- RecyclerView for report list -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/reportsRecyclerView"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="20dp"
-        android:contentDescription="List of fire reports"
+        android:layout_marginTop="12dp"
+        android:contentDescription="List of fire/other reports"
         app:layout_constraintTop_toBottomOf="@id/headerRow"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

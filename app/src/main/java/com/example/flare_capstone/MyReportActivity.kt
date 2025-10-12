@@ -1,19 +1,14 @@
 package com.example.flare_capstone
 
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
+import android.widget.ArrayAdapter
 import android.widget.SearchView
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.flare_capstone.databinding.ActivityMyReportBinding
+import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 
@@ -21,230 +16,371 @@ class MyReportActivity : AppCompatActivity(), ReportAdapter.OnItemClickListener 
 
     private lateinit var binding: ActivityMyReportBinding
     private lateinit var adapter: ReportAdapter
+
     private val allReports = mutableListOf<Any>()
     private val filteredReports = mutableListOf<Any>()
 
-    private lateinit var connectivityManager: ConnectivityManager
-    private var loadingDialog: AlertDialog? = null
+    // ----- Filters -----
+    private enum class TypeFilter { ALL, FIRE, OTHER, EMS, SMS }
+    private enum class StatusFilter { ALL, PENDING, RESPONDING, RESOLVED }
 
-    private var stationsLoaded = 0
-    private var slowInternetDetected = false
-    private val loadTimeoutMillis = 5000L
+    // Internal normalized category for filtering
+    private enum class Category { FIRE, OTHER, EMS, SMS }
 
-    private val handler = Handler(Looper.getMainLooper())
-    private val slowInternetRunnable = Runnable {
-        if (stationsLoaded < totalStations) {
-            slowInternetDetected = true
-            showLoadingDialog("Slow internet connection")
-        }
-    }
+    private var typeFilter: TypeFilter = TypeFilter.ALL
+    private var statusFilter: StatusFilter = StatusFilter.ALL
+    private var dateFromMillis: Long? = null
+    private var dateToMillis: Long? = null
+    private var searchQuery: String = ""
 
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            runOnUiThread { if (!slowInternetDetected) hideLoadingDialog() }
-        }
-        override fun onLost(network: Network) {
-            runOnUiThread { showLoadingDialog("No internet connection") }
-        }
-    }
+    // ----- DB paths -----
+    private val STATION_ROOT = "TagumCityCentralFireStation"
+    private val FIRE_PATH    = "$STATION_ROOT/AllReport/FireReport"
+    private val OTHER_PATH   = "$STATION_ROOT/AllReport/OtherEmergencyReport"
+    private val EMS_PATH     = "$STATION_ROOT/AllReport/EmergencyMedicalServicesReport"
+    private val SMS_PATH     = "$STATION_ROOT/AllReport/SmsReport"
 
-    private val fireReportStations = listOf(
-        "LaFilipinaFireStation/LaFilipinaFireReport",
-        "CuambuganFireStation/CuambuganFireReport",
-        "MabiniFireStation/MabiniFireReport"
-    )
-    private val otherEmergencyStations = listOf(
-        "LaFilipinaFireStation/LaFilipinaOtherEmergency",
-        "CuambuganFireStation/CuambuganOtherEmergency",
-        "MabiniFireStation/MabiniOtherEmergency"
-    )
-
-    private val totalStations = fireReportStations.size + otherEmergencyStations.size
-    private var userPhone: String? = null
+    // ----- Current user -----
+    private var userName: String? = null
+    private var userContact: String? = null
+    private var userEmail: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMyReportBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        connectivityManager = getSystemService(ConnectivityManager::class.java)
+        binding.back.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        if (!isConnected()) {
-            showLoadingDialog("No internet connection")
-        } else {
-            hideLoadingDialog()
-            handler.postDelayed(slowInternetRunnable, loadTimeoutMillis)
-        }
+        adapter = ReportAdapter(filteredReports, this)
+        binding.reportsRecyclerView.layoutManager = LinearLayoutManager(this)
+        binding.reportsRecyclerView.adapter = adapter
 
-        connectivityManager.registerDefaultNetworkCallback(networkCallback)
-
-        binding.back.setOnClickListener { onBackPressed() }
+        initFiltersUI()
 
         binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?) = false
             override fun onQueryTextChange(newText: String?): Boolean {
-                filterReports(newText.orEmpty())
+                searchQuery = newText.orEmpty()
+                applyFilters()
                 return true
             }
         })
 
-        binding.reportTypeRadioGroup.check(R.id.allReportsRadioButton)
-        binding.reportTypeRadioGroup.setOnCheckedChangeListener { _, checkedId ->
-            when (checkedId) {
-                R.id.fireReportRadioButton -> loadUserReports("FireReport")
-                R.id.otherEmergencyRadioButton -> loadUserReports("OtherEmergency")
-                R.id.allReportsRadioButton -> loadUserReports("All")
-            }
-        }
-
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
+        val authUser = FirebaseAuth.getInstance().currentUser
+        if (authUser == null) {
             Toast.makeText(this, "User not logged in.", Toast.LENGTH_SHORT).show()
-            return
+            finish(); return
         }
+        userEmail = authUser.email
 
-        FirebaseDatabase.getInstance().getReference("Users").child(uid)
+        FirebaseDatabase.getInstance().getReference("Users")
+            .child(authUser.uid)
             .get()
-            .addOnSuccessListener { snapshot ->
-                userPhone = snapshot.child("contact").value as? String
-                loadUserReports("All") // Ignore empty phone filter for testing
+            .addOnSuccessListener { snap ->
+                userName = snap.child("name").getValue(String::class.java)?.trim()
+                userContact = snap.child("contact").getValue(String::class.java)?.trim()
+                Log.d("MyReport", "Profile → name=[$userName], contact=[$userContact], email=[$userEmail]")
+                loadOnlyCurrentUsersReports()
             }
             .addOnFailureListener {
-                Toast.makeText(this, "Failed to load user profile.", Toast.LENGTH_SHORT).show()
+                Log.w("MyReport", "Failed to load profile; continuing with email only.")
+                loadOnlyCurrentUsersReports()
             }
     }
 
-    private fun isConnected(): Boolean {
-        val activeNetwork = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
-
-    private fun showLoadingDialog(message: String) {
-        if (loadingDialog == null) {
-            val builder = AlertDialog.Builder(this)
-            val dialogView = layoutInflater.inflate(R.layout.custom_loading_dialog, null)
-            builder.setView(dialogView)
-            builder.setCancelable(false)
-            loadingDialog = builder.create()
+    private fun initFiltersUI() {
+        val typeItems = listOf("All", "Fire Report", "Other Emergency", "EMS", "SMS")
+        binding.typeDropdown.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, typeItems))
+        binding.typeDropdown.setText("All", false)
+        binding.typeDropdown.setOnItemClickListener { _, _, pos, _ ->
+            typeFilter = when (pos) {
+                1 -> TypeFilter.FIRE
+                2 -> TypeFilter.OTHER
+                3 -> TypeFilter.EMS
+                4 -> TypeFilter.SMS
+                else -> TypeFilter.ALL
+            }
+            applyFilters()
         }
-        loadingDialog?.show()
-        loadingDialog?.findViewById<TextView>(R.id.loading_message)?.text = message
+
+        // EXACT strings you wanted
+        val statusItems = listOf("All", "Pending", "Ongoing", "Completed")
+        binding.statusDropdown.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, statusItems))
+        binding.statusDropdown.setText("All", false)
+        binding.statusDropdown.setOnItemClickListener { _, _, pos, _ ->
+            statusFilter = when (pos) {
+                1 -> StatusFilter.PENDING
+                2 -> StatusFilter.RESPONDING   // "Ongoing"
+                3 -> StatusFilter.RESOLVED     // "Completed"
+                else -> StatusFilter.ALL
+            }
+            applyFilters()
+        }
+
+        binding.dateRangeBtn.setOnClickListener {
+            val picker = MaterialDatePicker.Builder.dateRangePicker()
+                .setTitleText("Select date range")
+                .build()
+
+            picker.addOnPositiveButtonClickListener { range ->
+                dateFromMillis = range.first
+                dateToMillis = range.second?.plus(86_400_000L - 1)
+                binding.dateRangeBtn.text = picker.headerText
+                applyFilters()
+            }
+            picker.show(supportFragmentManager, "dateRangePicker")
+        }
+
+        binding.dateRangeBtn.setOnLongClickListener {
+            dateFromMillis = null
+            dateToMillis = null
+            binding.dateRangeBtn.text = "Date range"
+            applyFilters()
+            true
+        }
     }
 
-    private fun hideLoadingDialog() {
-        loadingDialog?.dismiss()
+    private fun normalizePhone(s: String?): String = s?.filter { it.isDigit() } ?: ""
+
+    private fun belongsToCurrentUser(name: String?, contact: String?): Boolean {
+        val userContactN = normalizePhone(userContact)
+        val reportContactN = normalizePhone(contact)
+        val contactMatches = userContactN.isNotEmpty() && reportContactN.isNotEmpty() && userContactN == reportContactN
+
+        val userNameN = (userName ?: "").trim().lowercase()
+        val reportNameN = (name ?: "").trim().lowercase()
+        val nameMatches = userNameN.isNotEmpty() && reportNameN.isNotEmpty() && userNameN == reportNameN
+
+        return contactMatches || nameMatches
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        connectivityManager.unregisterNetworkCallback(networkCallback)
-        handler.removeCallbacks(slowInternetRunnable)
+    private fun typeStringOf(r: Any): String = when (r) {
+        is FireReport     -> r.type.ifBlank { "Fire" }
+        is OtherEmergency -> r.emergencyType.ifBlank { "Other" }
+        else              -> ""
     }
 
-    private fun loadUserReports(reportType: String) {
-        val db = FirebaseDatabase.getInstance().reference
-        stationsLoaded = 0
-        slowInternetDetected = false
+    private fun categoryOf(r: Any): Category = when (r) {
+        is FireReport     -> Category.FIRE
+        is OtherEmergency -> when {
+            r.category.equals("EMS", true) -> Category.EMS
+            r.category.equals("SMS", true) -> Category.SMS
+            else                           -> Category.OTHER
+        }
+        else -> Category.OTHER
+    }
+
+    private fun loadOnlyCurrentUsersReports() {
         allReports.clear()
+        filteredReports.clear()
+        adapter.notifyDataSetChanged()
 
-        val stationsToLoad = when (reportType) {
-            "FireReport" -> fireReportStations
-            "OtherEmergency" -> otherEmergencyStations
-            else -> fireReportStations + otherEmergencyStations
-        }
+        val db = FirebaseDatabase.getInstance().reference
+        val paths = listOf(FIRE_PATH, OTHER_PATH, EMS_PATH, SMS_PATH)
+        var finished = 0
 
-        for (path in stationsToLoad) {
+        paths.forEach { path ->
             db.child(path).get()
                 .addOnSuccessListener { snapshot ->
                     for (reportSnap in snapshot.children) {
                         try {
-                            if (path.contains("OtherEmergency")) {
-                                val report = OtherEmergency(
-                                    emergencyType = reportSnap.child("emergencyType").getValue(String::class.java) ?: "",
-                                    name = reportSnap.child("name").getValue(String::class.java) ?: "",
-                                    contact = reportSnap.child("contact").getValue(String::class.java) ?: "",
-                                    date = reportSnap.child("date").getValue(String::class.java) ?: "",
-                                    reportTime = reportSnap.child("reportTime").getValue(String::class.java) ?: "",
-                                    latitude = reportSnap.child("latitude").getValue(String::class.java) ?: "",
-                                    longitude = reportSnap.child("longitude").getValue(String::class.java) ?: "",
-                                    location = reportSnap.child("location").getValue(String::class.java) ?: "",
-                                    exactLocation = reportSnap.child("exactLocation").getValue(String::class.java) ?: "",
-                                    lastReportedTime = reportSnap.child("lastReportedTime").getValue(Long::class.java) ?: 0L,
-                                    timestamp = reportSnap.child("timestamp").getValue(Long::class.java) ?: 0L,
-                                    read = reportSnap.child("read").getValue(Boolean::class.java) ?: false,
-                                    fireStationName = reportSnap.child("fireStationName").getValue(String::class.java) ?: ""
-                                )
-                                allReports.add(report)
-                            } else {
-                                val latValue = (reportSnap.child("latitude").value as? Number)?.toDouble() ?: 0.0
-                                val lonValue = (reportSnap.child("longitude").value as? Number)?.toDouble() ?: 0.0
-                                val report = FireReport(
-                                    name = reportSnap.child("name").getValue(String::class.java) ?: "",
-                                    contact = reportSnap.child("contact").getValue(String::class.java) ?: "",
-                                    fireStartTime = reportSnap.child("fireStartTime").getValue(String::class.java) ?: "",
-                                    numberOfHousesAffected = reportSnap.child("numberOfHousesAffected").getValue(Int::class.java) ?: 0,
-                                    alertLevel = reportSnap.child("alertLevel").getValue(String::class.java) ?: "",
-                                    date = reportSnap.child("date").getValue(String::class.java) ?: "",
-                                    reportTime = reportSnap.child("reportTime").getValue(String::class.java) ?: "",
-                                    latitude = latValue,
-                                    longitude = lonValue,
-                                    location = reportSnap.child("location").getValue(String::class.java) ?: "",
-                                    exactLocation = reportSnap.child("exactLocation").getValue(String::class.java) ?: "",
-                                    timeStamp = reportSnap.child("timeStamp").getValue(Long::class.java) ?: 0L,
-                                    status = reportSnap.child("status").getValue(String::class.java) ?: "Pending",
-                                    fireStationName = reportSnap.child("fireStationName").getValue(String::class.java) ?: ""
-                                )
-                                allReports.add(report)
+                            when {
+                                path.endsWith("FireReport") -> {
+                                    val lat = (reportSnap.child("latitude").value as? Number)?.toDouble() ?: 0.0
+                                    val lon = (reportSnap.child("longitude").value as? Number)?.toDouble() ?: 0.0
+                                    val name = reportSnap.child("name").getValue(String::class.java)
+                                    val contact = reportSnap.child("contact").getValue(String::class.java)
+                                    if (!belongsToCurrentUser(name, contact)) continue
+
+                                    val report = FireReport(
+                                        name            = name ?: "",
+                                        contact         = contact ?: "",
+                                        date            = reportSnap.child("date").getValue(String::class.java) ?: "",
+                                        reportTime      = reportSnap.child("reportTime").getValue(String::class.java) ?: "",
+                                        latitude        = lat,
+                                        longitude       = lon,
+                                        exactLocation   = reportSnap.child("exactLocation").getValue(String::class.java) ?: "",
+                                        timeStamp       = reportSnap.child("timeStamp").getValue(Long::class.java)
+                                            ?: (reportSnap.child("timestamp").getValue(Long::class.java) ?: 0L),
+                                        status          = reportSnap.child("status").getValue(String::class.java) ?: "Pending",
+                                        fireStationName = reportSnap.child("fireStationName").getValue(String::class.java) ?: "",
+                                        type            = reportSnap.child("type").getValue(String::class.java) ?: "",
+                                        category        = "FIRE"
+                                    )
+                                    allReports.add(report)
+                                }
+
+                                path.endsWith("OtherEmergencyReport") -> {
+                                    val name = reportSnap.child("name").getValue(String::class.java)
+                                    val contact = reportSnap.child("contact").getValue(String::class.java)
+                                    if (!belongsToCurrentUser(name, contact)) continue
+
+                                    val report = OtherEmergency(
+                                        emergencyType   = reportSnap.child("emergencyType").getValue(String::class.java) ?: "Other",
+                                        name            = name ?: "",
+                                        contact         = contact ?: "",
+                                        date            = reportSnap.child("date").getValue(String::class.java) ?: "",
+                                        reportTime      = reportSnap.child("reportTime").getValue(String::class.java) ?: "",
+                                        latitude        = reportSnap.child("latitude").getValue(String::class.java) ?: "",
+                                        longitude       = reportSnap.child("longitude").getValue(String::class.java) ?: "",
+                                        location        = reportSnap.child("location").getValue(String::class.java) ?: "",
+                                        exactLocation   = reportSnap.child("exactLocation").getValue(String::class.java) ?: "",
+                                        lastReportedTime= reportSnap.child("lastReportedTime").getValue(Long::class.java) ?: 0L,
+                                        timestamp       = reportSnap.child("timestamp").getValue(Long::class.java) ?: 0L,
+                                        read            = reportSnap.child("read").getValue(Boolean::class.java) ?: false,
+                                        fireStationName = reportSnap.child("fireStationName").getValue(String::class.java) ?: "",
+                                        status          = reportSnap.child("status").getValue(String::class.java) ?: "Pending",
+                                        type            = reportSnap.child("type").getValue(String::class.java) ?: "",
+                                        category        = "OTHER"
+                                    )
+                                    allReports.add(report)
+                                }
+
+                                path.endsWith("EmergencyMedicalServicesReport") -> {
+                                    val name = reportSnap.child("name").getValue(String::class.java)
+                                    val contact = reportSnap.child("contact").getValue(String::class.java)
+                                    if (!belongsToCurrentUser(name, contact)) continue
+
+                                    val emsType = reportSnap.child("type").getValue(String::class.java) ?: "EMS"
+                                    val report = OtherEmergency(
+                                        emergencyType   = emsType, // show EMS subtype (e.g. “Seizure”)
+                                        name            = name ?: "",
+                                        contact         = contact ?: "",
+                                        date            = reportSnap.child("date").getValue(String::class.java) ?: "",
+                                        reportTime      = reportSnap.child("reportTime").getValue(String::class.java) ?: "",
+                                        latitude        = reportSnap.child("latitude").getValue(String::class.java) ?: "",
+                                        longitude       = reportSnap.child("longitude").getValue(String::class.java) ?: "",
+                                        location        = reportSnap.child("location").getValue(String::class.java) ?: "",
+                                        exactLocation   = reportSnap.child("exactLocation").getValue(String::class.java) ?: "",
+                                        lastReportedTime= reportSnap.child("lastReportedTime").getValue(Long::class.java) ?: 0L,
+                                        timestamp       = reportSnap.child("timestamp").getValue(Long::class.java) ?: 0L,
+                                        read            = reportSnap.child("read").getValue(Boolean::class.java) ?: false,
+                                        fireStationName = reportSnap.child("fireStationName").getValue(String::class.java) ?: "",
+                                        status          = reportSnap.child("status").getValue(String::class.java) ?: "Pending",
+                                        type            = emsType,
+                                        category        = "EMS"
+                                    )
+                                    allReports.add(report)
+                                }
+
+                                path.endsWith("SmsReport") -> {
+                                    val name = reportSnap.child("name").getValue(String::class.java)
+                                    val contact = reportSnap.child("contact").getValue(String::class.java)
+                                    if (!belongsToCurrentUser(name, contact)) continue
+
+                                    val msg = reportSnap.child("message").getValue(String::class.java) ?: ""
+                                    val smsType = reportSnap.child("type").getValue(String::class.java) ?: "SMS"
+                                    val report = OtherEmergency(
+                                        emergencyType   = smsType,
+                                        name            = name ?: "",
+                                        contact         = contact ?: "",
+                                        date            = reportSnap.child("date").getValue(String::class.java) ?: "",
+                                        reportTime      = reportSnap.child("reportTime").getValue(String::class.java) ?: "",
+                                        latitude        = "",
+                                        longitude       = "",
+                                        location        = msg,
+                                        exactLocation   = "",
+                                        lastReportedTime= 0L,
+                                        timestamp       = reportSnap.child("timestamp").getValue(Long::class.java) ?: 0L,
+                                        read            = reportSnap.child("read").getValue(Boolean::class.java) ?: false,
+                                        fireStationName = reportSnap.child("fireStationName").getValue(String::class.java) ?: "",
+                                        status          = reportSnap.child("status").getValue(String::class.java) ?: "Pending",
+                                        type            = smsType,
+                                        category        = "SMS"
+                                    )
+                                    allReports.add(report)
+                                }
                             }
                         } catch (e: Exception) {
                             Log.e("ReportParseError", "Failed to parse: ${e.message}")
                         }
                     }
-                    stationsLoaded++
-                    if (stationsLoaded == stationsToLoad.size) onAllStationsLoaded()
                 }
-                .addOnFailureListener {
-                    stationsLoaded++
-                    if (stationsLoaded == stationsToLoad.size) onAllStationsLoaded()
+                .addOnCompleteListener {
+                    finished++
+                    if (finished == paths.size) onAllLoaded()
                 }
         }
     }
 
-    private fun onAllStationsLoaded() {
-        handler.removeCallbacks(slowInternetRunnable)
-        if (!slowInternetDetected) hideLoadingDialog()
-
+    private fun onAllLoaded() {
         allReports.sortByDescending {
             when (it) {
-                is FireReport -> it.timeStamp
+                is FireReport     -> it.timeStamp
                 is OtherEmergency -> it.timestamp
-                else -> 0L
+                else              -> 0L
             }
         }
-        filteredReports.clear()
-        filteredReports.addAll(allReports)
-        adapter = ReportAdapter(filteredReports, this)
-        binding.reportsRecyclerView.layoutManager = LinearLayoutManager(this)
-        binding.reportsRecyclerView.adapter = adapter
+        applyFilters()
 
         if (allReports.isEmpty()) {
-            Toast.makeText(this, "No reports found.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No reports found for your account.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun filterReports(query: String) {
-        val filtered = allReports.filter {
-            when (it) {
-                is FireReport -> it.name.contains(query, true) ||
-                        it.alertLevel.contains(query, true) ||
-                        it.status.contains(query, true)
-                is OtherEmergency -> it.name.contains(query, true) ||
-                        it.emergencyType.contains(query, true) ||
-                        it.fireStationName.contains(query, true)
-                else -> false
+    private fun applyFilters() {
+        val q = searchQuery.trim()
+
+        val filtered = allReports.asSequence()
+            // Type filter (EXHAUSTIVE and returns Boolean)
+            .filter { r ->
+                val cat = categoryOf(r)
+                when (typeFilter) {
+                    TypeFilter.ALL   -> true
+                    TypeFilter.FIRE  -> cat == Category.FIRE
+                    TypeFilter.OTHER -> cat == Category.OTHER
+                    TypeFilter.EMS   -> cat == Category.EMS
+                    TypeFilter.SMS   -> cat == Category.SMS
+                }
             }
-        }
+            // Status filter (FireReport only) — exact strings
+            .filter { r ->
+                when (statusFilter) {
+                    StatusFilter.ALL        -> true
+                    StatusFilter.PENDING    -> (r as? FireReport)?.status.equals("Pending", true)
+                    StatusFilter.RESPONDING -> (r as? FireReport)?.status.equals("Ongoing", true)
+                    StatusFilter.RESOLVED   -> (r as? FireReport)?.status.equals("Completed", true)
+                }
+            }
+            // Date range filter
+            .filter { r ->
+                val ts = when (r) {
+                    is FireReport     -> r.timeStamp
+                    is OtherEmergency -> r.timestamp
+                    else              -> 0L
+                }
+                val afterStart = dateFromMillis?.let { ts >= it } ?: true
+                val beforeEnd  = dateToMillis?.let { ts <= it } ?: true
+                afterStart && beforeEnd
+            }
+            // Search (includes real type strings)
+            .filter { r ->
+                if (q.isEmpty()) return@filter true
+                val typeStr = typeStringOf(r)
+                when (r) {
+                    is FireReport -> {
+                        r.name.contains(q, true) ||
+                                r.status.contains(q, true) ||
+                                r.fireStationName.contains(q, true) ||
+                                r.exactLocation.contains(q, true) ||
+                                typeStr.contains(q, true) ||
+                                r.type.contains(q, true)
+                    }
+                    is OtherEmergency -> {
+                        r.name.contains(q, true) ||
+                                r.emergencyType.contains(q, true) ||
+                                r.fireStationName.contains(q, true) ||
+                                r.location.contains(q, true) ||
+                                r.exactLocation.contains(q, true) ||
+                                typeStr.contains(q, true) ||
+                                r.type.contains(q, true)
+                    }
+                    else -> false
+                }
+            }
+            .toList()
+
         filteredReports.clear()
         filteredReports.addAll(filtered)
         adapter.notifyDataSetChanged()

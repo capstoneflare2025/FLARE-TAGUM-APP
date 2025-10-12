@@ -24,13 +24,7 @@ class ProfileFireFighterFragment : Fragment() {
     private val auth by lazy { FirebaseAuth.getInstance() }
     private val db by lazy { FirebaseDatabase.getInstance().reference }
 
-    private val stationPaths = listOf(
-        "MabiniFireStation" to "MabiniFireFighterAccount",
-        "LafilipinaFireStation" to "LafilipinaFireFighterAccount",
-        "CanocotanFireStation" to "CanocotanFireFighterAccount"
-    )
-
-    // Will hold something like "MabiniFireStation/MabiniFireFighterAccount"
+    // Example result: "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/MabiniFireFighterAccount"
     private var matchedPath: String? = null
 
     override fun onCreateView(
@@ -55,7 +49,7 @@ class ProfileFireFighterFragment : Fragment() {
         if (email.isNullOrBlank()) {
             Toast.makeText(requireContext(), "No signed-in user.", Toast.LENGTH_SHORT).show()
         } else {
-            findAndBindFirefighter(email)
+            loadAndBindProfile(email)
         }
 
         // Edit Profile → launch firefighter editor with the matched path
@@ -70,7 +64,7 @@ class ProfileFireFighterFragment : Fragment() {
             startActivity(intent)
         }
 
-        // Logout flow (kept)
+        // Logout
         binding.logout.setOnClickListener {
             val dialogView = layoutInflater.inflate(R.layout.dialog_logout, null)
             dialogView.findViewById<ImageView>(R.id.logoImageView)?.setImageResource(R.drawable.ic_logo)
@@ -90,64 +84,77 @@ class ProfileFireFighterFragment : Fragment() {
     }
 
     /**
-     * Read each station’s *FireFighterAccount and compare .email with logged-in email.
-     * Stops at the first match and binds the UI. Saves the matched DB path.
+     * Map the email → station account key, then read:
+     * TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/<AccountKey>
+     * Expected keys: email, name, contact, profile(Base64)
      */
-    private fun findAndBindFirefighter(emailLc: String, index: Int = 0) {
-        if (!isAdded || _binding == null) return
-        if (index >= stationPaths.size) {
-            binding.fullyName.text = "Unknown Firefighter"
-            binding.fullName.text = emailLc
-            binding.contact.text = "—"
-            binding.profileIcon.setImageResource(R.drawable.ic_default_profile)
-            matchedPath = null
-            Toast.makeText(requireContext(), "No firefighter profile matched $emailLc.", Toast.LENGTH_SHORT).show()
+    private fun loadAndBindProfile(emailLc: String) {
+        val accountKey = stationAccountForEmail(emailLc)
+        if (accountKey == null) {
+            bindUnknown(emailLc, reason = "No station mapping for $emailLc")
             return
         }
 
-        val (stationNode, accountNode) = stationPaths[index]
-        val ref = db.child(stationNode).child(accountNode)
+        val path = "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/$accountKey"
+        matchedPath = path
 
-        ref.addListenerForSingleValueEvent(object : ValueEventListener {
+        db.child(path).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snap: DataSnapshot) {
                 if (!isAdded || _binding == null) return
 
                 if (!snap.exists()) {
-                    findAndBindFirefighter(emailLc, index + 1); return
+                    bindUnknown(emailLc, reason = "Profile node missing at $path")
+                    return
                 }
 
                 val stationEmail = snap.child("email").getValue(String::class.java)?.trim()?.lowercase()
-                if (stationEmail == emailLc) {
-                    val name = snap.child("name").getValue(String::class.java) ?: "(No name)"
-                    val contact = snap.child("contact").getValue(String::class.java) ?: "—"
-                    val profileBase64 = snap.child("profile").getValue(String::class.java)
+                val name = snap.child("name").getValue(String::class.java) ?: "(No name)"
+                val contact = snap.child("contact").getValue(String::class.java) ?: "—"
+                val profileBase64 = snap.child("profile").getValue(String::class.java)
 
-                    binding.fullyName.text = name
-                    binding.fullName.text = stationEmail
-                    binding.contact.text = contact
-
-                    // Decode and show photo (Base64 → Bitmap). Fallback to default if null/invalid.
-                    val bmp = convertBase64ToBitmap(profileBase64)
-                    if (bmp != null) {
-                        binding.profileIcon.setImageBitmap(bmp)
-                    } else {
-                        binding.profileIcon.setImageResource(R.drawable.ic_default_profile)
-                    }
-
-                    // Save path so the editor knows where to write
-                    matchedPath = "$stationNode/$accountNode"
-
-                } else {
-                    findAndBindFirefighter(emailLc, index + 1)
+                // If DB email is present and doesn't match, still show but warn.
+                if (!stationEmail.isNullOrBlank() && stationEmail != emailLc) {
+                    Toast.makeText(requireContext(), "Warning: profile email differs from signed-in email.", Toast.LENGTH_SHORT).show()
                 }
+
+                binding.fullyName.text = name
+                binding.fullName.text = stationEmail ?: emailLc
+                binding.contact.text = contact
+
+                convertBase64ToBitmap(profileBase64)?.let {
+                    binding.profileIcon.setImageBitmap(it)
+                } ?: binding.profileIcon.setImageResource(R.drawable.ic_default_profile)
             }
 
             override fun onCancelled(error: DatabaseError) {
                 if (!isAdded || _binding == null) return
-                android.util.Log.w("ProfileFF", "DB error @ $stationNode/$accountNode: ${error.message}")
-                findAndBindFirefighter(emailLc, index + 1)
+                bindUnknown(emailLc, reason = "DB error: ${error.message}")
             }
         })
+    }
+
+    private fun stationAccountForEmail(email: String?): String? {
+        val e = email ?: return null
+        return when (e) {
+            // Mabini
+
+            "mabiniff01@gmail.com" -> "MabiniFireFighterAccount"
+
+            "lafilipinaff01@gmail.com" -> "LaFilipinaFireFighterAccount"
+
+            "canocotanff01@gmail.com" -> "CanocotanFireFighterAccount"
+
+            else -> null
+        }
+    }
+
+    private fun bindUnknown(emailLc: String, reason: String) {
+        binding.fullyName.text = "Unknown Firefighter"
+        binding.fullName.text = emailLc
+        binding.contact.text = "—"
+        binding.profileIcon.setImageResource(R.drawable.ic_default_profile)
+        matchedPath = null
+        Toast.makeText(requireContext(), reason, Toast.LENGTH_SHORT).show()
     }
 
     private fun convertBase64ToBitmap(base64String: String?): Bitmap? {

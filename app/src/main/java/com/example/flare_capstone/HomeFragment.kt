@@ -58,6 +58,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
+import androidx.navigation.fragment.findNavController
 
 class HomeFragment : Fragment(), OnMapReadyCallback {
 
@@ -136,10 +137,31 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     private val DEFAULT_ZOOM_COUNTRY = 5.8f
     private val DEFAULT_ZOOM_CITY = 14f
 
+    /* ---------------- Station gate (Tagum Central status) ---------------- */
+    private var tagumCentralStatus: String? = null  // "Active" | "Inactive" | null (unknown yet)
+    private var statusRef: DatabaseReference? = null
+    private var statusListener: ValueEventListener? = null
+    private var stationStatusLoaded = false
+
+
+
+    private fun isStationActive(): Boolean =
+        tagumCentralStatus?.equals("Active", ignoreCase = true) == true
+
+    private fun stationGateMessage(): String = when {
+        !stationStatusLoaded -> "Fetching station status…"
+        tagumCentralStatus.equals("Inactive", ignoreCase = true) ->
+            "Reports are temporarily disabled: Tagum Central Fire Station is inactive."
+        tagumCentralStatus.equals("Active", ignoreCase = true) -> ""
+        else -> "Station status is missing. Please contact admin."
+    }
+
+
+
     private val stationProfileKey = mapOf(
-        "CanocotanFireStation" to "CanocotanProfile",
-        "LaFilipinaFireStation" to "LaFilipinaProfile",
-        "MabiniFireStation" to "MabiniProfile"
+        "CapstoneFlare/CanocotanFireStation" to "Profile",
+        "CapstoneFlare/LaFilipinaFireStation" to "Profile",
+        "CapstoneFlare/MabiniFireStation" to "Profile"
     )
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
@@ -178,6 +200,9 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
         auth = FirebaseAuth.getInstance()
 
+        startTagumCentralStatusRealtime()
+
+
         // Ensure a live map fragment is attached
         val mapFrag = (childFragmentManager.findFragmentById(R.id.map) as? SupportMapFragment)
             ?: SupportMapFragment.newInstance().also {
@@ -192,34 +217,20 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
         // ---------------- Button handlers with Tagum gate ----------------
         binding.fireButton.setOnClickListener {
-            if (userLatitude == 0.0 && userLongitude == 0.0) {
-                postToast("Getting your location…"); return@setOnClickListener
-            }
-            if (!isInsideTagum()) {
-                postToast("You can’t submit a report outside Tagum."); return@setOnClickListener
-            }
+            if (!canSubmitReportWithToasts()) return@setOnClickListener
             startActivity(Intent(requireActivity(), FireLevelActivity::class.java))
         }
 
-//        binding.accidentButton.setOnClickListener {
-//            if (userLatitude == 0.0 && userLongitude == 0.0) {
-//                postToast("Getting your location…"); return@setOnClickListener
-//            }
-//            if (!isInsideTagum()) {
-//                postToast("You can’t submit a report outside Tagum."); return@setOnClickListener
-//            }
-//            startActivity(Intent(requireActivity(), VehicleAccidentActivity::class.java))
-//        }
+        binding.accidentButton.setOnClickListener {
+            if (!canSubmitReportWithToasts()) return@setOnClickListener
+            startActivity(Intent(requireActivity(), EmergencyMedicalServicesActivity::class.java))
+        }
 
         binding.otherButton.setOnClickListener {
-            if (userLatitude == 0.0 && userLongitude == 0.0) {
-                postToast("Getting your location…"); return@setOnClickListener
-            }
-            if (!isInsideTagum()) {
-                postToast("You can’t submit a report outside Tagum."); return@setOnClickListener
-            }
+            if (!canSubmitReportWithToasts()) return@setOnClickListener
             startActivity(Intent(requireActivity(), OtherEmergencyActivity::class.java))
         }
+
 
         // Toolbar + Drawer
         val topBar = view.findViewById<MaterialToolbar?>(R.id.topAppBar)
@@ -232,20 +243,30 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         topBar?.setNavigationOnClickListener { drawer?.open() }
         nav?.setNavigationItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.nav_home -> { /* already here */ }
                 R.id.nav_report_fire -> {
-                    if (userLatitude == 0.0 && userLongitude == 0.0) {
-                        postToast("Getting your location…")
-                    } else if (!isInsideTagum()) {
-                        postToast("You can’t submit a report outside Tagum.")
+                    if (!canSubmitReportWithToasts()) {
+                        // gate already toasts
                     } else {
                         startActivity(Intent(requireContext(), FireLevelActivity::class.java))
                     }
                 }
+                R.id.nav_report_other -> {
+                    if (!canSubmitReportWithToasts()) {
+                        // gate already toasts
+                    } else {
+                        startActivity(Intent(requireContext(), OtherEmergencyActivity::class.java))
+                    }
+                }
+                R.id.nav_report_ems -> {
+                    if (!canSubmitReportWithToasts()) {
+                        // gate already toasts
+                    } else {
+                        startActivity(Intent(requireContext(), EmergencyMedicalServicesActivity::class.java))
+                    }
+                }
                 R.id.nav_my_reports -> startActivity(Intent(requireContext(), MyReportActivity::class.java))
-                R.id.nav_settings -> { /* TODO */ }
                 R.id.nav_about -> startActivity(Intent(requireContext(), AboutAppActivity::class.java))
-                R.id.nav_settings -> { logout()}
+
             }
             drawer?.closeDrawers(); true
         }
@@ -303,7 +324,18 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
         routeRequestSeq.incrementAndGet()
 
         _binding = null
+
+        statusListener?.let { statusRef?.removeEventListener(it) }
+        statusListener = null
+        statusRef = null
+
     }
+
+    private fun openSettings() {
+        findNavController().navigate(R.id.settingsFragment)
+    }
+
+
 
     private fun logout(){
         val inflater = requireActivity().layoutInflater
@@ -488,13 +520,13 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun fetchFireStationLocations() {
-        fetchFireStationLatLng("CanocotanFireStation") { lat, lng ->
+        fetchFireStationLatLng("CapstoneFlare/CanocotanFireStation") { lat, lng ->
             canocotanLat = lat; canocotanLng = lng; canocotanFetched = true; updateMapIfReady()
         }
-        fetchFireStationLatLng("LaFilipinaFireStation") { lat, lng ->
+        fetchFireStationLatLng("CapstoneFlare/LaFilipinaFireStation") { lat, lng ->
             laFilipinaLat = lat; laFilipinaLng = lng; laFilipinaFetched = true; updateMapIfReady()
         }
-        fetchFireStationLatLng("MabiniFireStation") { lat, lng ->
+        fetchFireStationLatLng("CapstoneFlare/MabiniFireStation") { lat, lng ->
             mabiniLat = lat; mabiniLng = lng; mabiniFetched = true; updateMapIfReady()
         }
     }
@@ -1014,5 +1046,61 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             else      -> 0.0
         }
     }
+
+
+    private fun startTagumCentralStatusRealtime() {
+        val ref = database.child("TagumCityCentralFireStation").child("Profile").child("status")
+        statusRef = ref
+
+        // 1) Prime once (fastest way to avoid the "Checking…" toast)
+        ref.get().addOnSuccessListener { snap ->
+            stationStatusLoaded = true
+            tagumCentralStatus = snap.getValue(String::class.java)?.trim()
+        }.addOnFailureListener {
+            stationStatusLoaded = true   // loaded but failed -> treat as missing
+            tagumCentralStatus = null
+        }
+
+        // 2) Keep it live
+        statusListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val old = tagumCentralStatus
+                stationStatusLoaded = true
+                tagumCentralStatus = snapshot.getValue(String::class.java)?.trim()
+
+                if (old != null && old != tagumCentralStatus) {
+                    when (tagumCentralStatus?.lowercase()) {
+                        "active"   -> postToast("Tagum Central: now Active. Reports enabled.")
+                        "inactive" -> postToast("Tagum Central: now Inactive. Reports disabled.")
+                    }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {
+                stationStatusLoaded = true
+            }
+        }
+        ref.addValueEventListener(statusListener as ValueEventListener)
+    }
+
+
+
+    /** Returns true when all gates pass; shows a toast and returns false otherwise. */
+    private fun canSubmitReportWithToasts(): Boolean {
+        if (userLatitude == 0.0 && userLongitude == 0.0) {
+            postToast("Getting your location…"); return false
+        }
+        if (!isInsideTagum()) {
+            postToast("You can’t submit a report outside Tagum."); return false
+        }
+        if (!stationStatusLoaded) {
+            postToast(stationGateMessage()); return false
+        }
+        if (!isStationActive()) {
+            postToast(stationGateMessage()); return false
+        }
+        return true
+    }
+
+
 
 }

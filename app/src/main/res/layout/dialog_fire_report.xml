@@ -2,175 +2,268 @@
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    style="@style/App.Card.Outer"
+    android:id="@+id/rootCard"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:layout_margin="16dp"
+    app:cardCornerRadius="16dp"
+    app:cardUseCompatPadding="true"
+    app:strokeColor="?attr/colorOutline"
+    app:strokeWidth="1dp">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
+        android:fadeScrollbars="false"
+        android:scrollbarStyle="outsideOverlay">
 
-        <!-- Name -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardName"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+        <LinearLayout
+            android:id="@+id/container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <LinearLayout style="@style/App.Row">
+            <!-- Header -->
+            <TextView
+                android:id="@+id/title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Fire Report"
+                android:textStyle="bold"
+                android:paddingBottom="8dp"
+                android:textAppearance="?attr/textAppearanceTitleLarge"/>
+
+            <com.google.android.material.divider.MaterialDivider
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- Name -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp">
+
                 <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Name:" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Name:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
 
                 <TextView
                     android:id="@+id/txtName"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Contact -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardContact"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toBottomOf="@id/cardName"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            <!-- Contact -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp">
 
-            <LinearLayout style="@style/App.Row">
                 <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Contact:" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Contact:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
 
                 <TextView
                     android:id="@+id/txtContact"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:autoLink="phone"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Alert Level -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardAlert"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toBottomOf="@id/cardContact"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <LinearLayout style="@style/App.Row">
-                <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Alert Level:" />
+            <!-- Type -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp">
 
                 <TextView
-                    android:id="@+id/txtAlertLevel"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Type:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
+
+                <TextView
+                    android:id="@+id/txtType"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Date - Time -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardDate"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toBottomOf="@id/cardAlert"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <LinearLayout style="@style/App.Row">
-                <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Date - Time:" />
+            <!-- Date - Time -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp">
 
                 <TextView
-                    android:id="@+id/txtDate"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Date - Time:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
+
+                <TextView
+                    android:id="@+id/txtDateTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Fire Start Time -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardStartTime"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toBottomOf="@id/cardDate"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            <!-- Fire Start Time (optional; default gone) -->
+            <LinearLayout
+                android:id="@+id/rowStartTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp"
+                android:visibility="gone">
 
-            <LinearLayout style="@style/App.Row">
                 <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Fire Start Time:" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Fire Start Time:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
 
                 <TextView
                     android:id="@+id/txtStartTime"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Houses Affected -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardHouses"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toBottomOf="@id/cardStartTime"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            <!-- Houses Affected (optional; default gone) -->
+            <LinearLayout
+                android:id="@+id/rowHouses"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp"
+                android:visibility="gone">
 
-            <LinearLayout style="@style/App.Row">
                 <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Houses Affected:" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Houses Affected:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
 
                 <TextView
                     android:id="@+id/txtHouses"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Location -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardLocation"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toBottomOf="@id/cardHouses"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            <!-- Location -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp">
 
-            <LinearLayout style="@style/App.Row">
                 <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Location:" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Location:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
 
                 <TextView
                     android:id="@+id/txtLocation"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:autoLink="web"
+                    android:linksClickable="true"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Status -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardStatus"
-            style="@style/App.Card.Section"
-            app:layout_constraintTop_toBottomOf="@id/cardLocation"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            <!-- Status -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingVertical="6dp">
 
-            <LinearLayout style="@style/App.Row">
                 <TextView
-                    style="@style/App.Text.Label"
-                    android:text="Status:" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Status:"
+                    android:textStyle="bold"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
 
                 <TextView
                     android:id="@+id/txtStatus"
-                    style="@style/App.Text.Value" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="2"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Close Button -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnClose"
-            style="@style/App.Button.Danger"
-            android:text="Close"
-            app:layout_constraintTop_toBottomOf="@id/cardStatus"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="16dp" />
+            <com.google.android.material.divider.MaterialDivider
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="8dp"/>
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            <!-- Close Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClose"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="Close"
+                android:insetTop="6dp"
+                android:insetBottom="6dp"/>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 </com.google.android.material.card.MaterialCardView>

@@ -14,5 +14,7 @@ data class OtherEmergency(
     val timestamp: Long,
     var status: String = "Pending",
     var read: Boolean,
-    val fireStationName: String = "" // <-- new field
+    val fireStationName: String = "", // <-- new field
+    val type: String = "",
+    val category: String = "OTHER"    // OTHER / EMS / SMS
 )

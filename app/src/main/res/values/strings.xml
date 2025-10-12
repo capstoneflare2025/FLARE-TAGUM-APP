@@ -6,6 +6,10 @@
     <!-- optional
     <string name="locationiq_key">YOUR_LOCATIONIQ_KEY</string>
     -->
+    <string-array name="vehicle_types">
+        <item>Vehicular Accident</item>
+        <item>Patient Transport</item>
+    </string-array>
 
 
     <!-- res/values/strings.xml -->

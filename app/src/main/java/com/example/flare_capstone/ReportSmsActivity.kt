@@ -1,4 +1,3 @@
-// ReportSmsActivity.kt
 package com.example.flare_capstone
 
 import android.Manifest
@@ -23,11 +22,16 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.flare_capstone.databinding.ActivitySmsBinding
 import com.google.android.gms.location.*
+import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -37,16 +41,34 @@ class ReportSmsActivity : AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var db: AppDatabase
 
-    // Tagum City rough bounding box
-    private val TAGUM_LAT_MIN = 7.36
-    private val TAGUM_LAT_MAX = 7.56
-    private val TAGUM_LNG_MIN = 125.72
-    private val TAGUM_LNG_MAX = 125.92
+    // Default destination: CENTRAL
+    private val station = FireStation(
+        name = "Tagum City Central Fire Station",
+        contact = "09635741233",
+        latitude = 7.4217617292640785,      // same as Canocotan (as you said—don’t mind)
+        longitude = 125.79018416901866
+    )
 
-    private val fireStations = listOf(
-        FireStation("Canocotan Fire Station", "09673060785", 7.4217617292640785, 125.79018416901866),
-        FireStation("Mabini Fire Station", "09663041569", 7.450150854535532, 125.79529166335233),
-        FireStation("La Filipina Fire Station", "09750647852", 7.4768350720999655, 125.8054726056261)
+    // CapstoneFlare stations (for nearest computation ONLY)
+    private val capstoneStations = listOf(
+        FireStation(
+            name = "Canocotan Fire Station",
+            contact = "", // unknown; optional
+            latitude = 7.4217617292640785,
+            longitude = 125.79018416901866
+        ),
+        FireStation(
+            name = "Mabini Fire Station",
+            contact = "",
+            latitude = 7.450150854535532,
+            longitude = 125.79529166335233
+        ),
+        FireStation(
+            name = "La Filipina Fire Station",
+            contact = "",
+            latitude = 7.4768350720999655,
+            longitude = 125.8054726056261
+        )
     )
 
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -58,6 +80,9 @@ class ReportSmsActivity : AppCompatActivity() {
         const val EXTRA_STATION = "extra_station"
     }
 
+    private var tagumRings: List<List<LatLng>>? = null
+    private var tagumLoaded = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySmsBinding.inflate(layoutInflater)
@@ -66,13 +91,16 @@ class ReportSmsActivity : AppCompatActivity() {
         db = AppDatabase.getDatabase(applicationContext)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), SMS_PERMISSION_REQUEST_CODE)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
-        }
+        // Load Tagum boundary
+        loadTagumBoundaryFromRaw()
 
+        // Permissions
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), SMS_PERMISSION_REQUEST_CODE)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
+
+        // SMS sent receiver
         registerReceiver(smsSentReceiver, IntentFilter(SMS_SENT_ACTION), RECEIVER_NOT_EXPORTED)
 
         binding.logo.setOnClickListener {
@@ -95,30 +123,45 @@ class ReportSmsActivity : AppCompatActivity() {
             }
 
             getCurrentLocation { userLocation ->
-                if (userLocation != null) {
-                    if (!isWithinTagumCity(userLocation)) {
-                        Toast.makeText(this, "Reporting restricted to Tagum City only.", Toast.LENGTH_LONG).show()
-                        return@getCurrentLocation
-                    }
-                    val nearestStation = getNearestFireStation(userLocation)
-                    val fullMessage = buildReportMessage(name, location, fireReport, nearestStation.name)
-                    confirmSendSms(nearestStation.contact, fullMessage, userLocation, nearestStation.name)
-                } else {
+                if (userLocation == null) {
                     Toast.makeText(this, "Failed to get location.", Toast.LENGTH_LONG).show()
+                    return@getCurrentLocation
                 }
+
+                if (!isInsideTagum(userLocation)) {
+                    Toast.makeText(this, "Reporting restricted to Tagum City only.", Toast.LENGTH_LONG).show()
+                    return@getCurrentLocation
+                }
+
+                // Compute nearest CapstoneFlare station (for message + DB metadata)
+                val (nearest, distMeters) = findNearestCapstoneStation(userLocation.latitude, userLocation.longitude)
+
+                val fullMessage = buildReportMessage(
+                    name = name,
+                    location = location,
+                    fireReport = fireReport,
+                    stationName = station.name,          // destination: CENTRAL
+                    nearestName = nearest.name,
+                    nearestMeters = distMeters
+                )
+
+                // Pass the central station to SMS; we’ll also save nearest info in the DB map
+                confirmSendSms(
+                    phoneNumber = station.contact,
+                    message = fullMessage,
+                    userLocation = userLocation,
+                    stationName = station.name,
+                    nearestStationForDb = nearest,
+                    nearestDistanceMetersForDb = distMeters
+                )
             }
         }
     }
 
     private val smsSentReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val to = intent?.getStringExtra(EXTRA_TO).orEmpty()
-            val station = intent?.getStringExtra(EXTRA_STATION).orEmpty()
             when (resultCode) {
-                AppCompatActivity.RESULT_OK -> {
-                    // no separate Contacts node; number is already embedded in the report details
-                    Toast.makeText(applicationContext, "Report SMS sent.", Toast.LENGTH_SHORT).show()
-                }
+                AppCompatActivity.RESULT_OK -> Toast.makeText(applicationContext, "Report SMS sent.", Toast.LENGTH_SHORT).show()
                 SmsManager.RESULT_ERROR_GENERIC_FAILURE,
                 SmsManager.RESULT_ERROR_NO_SERVICE,
                 SmsManager.RESULT_ERROR_NULL_PDU,
@@ -130,13 +173,44 @@ class ReportSmsActivity : AppCompatActivity() {
 
     data class FireStation(val name: String, val contact: String, val latitude: Double, val longitude: Double)
 
-    private fun buildReportMessage(name: String, location: String, fireReport: String, stationName: String): String {
+    // Haversine distance in meters
+    private fun distanceMeters(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Long {
+        val R = 6371000.0
+        val dLat = Math.toRadians(bLat - aLat)
+        val dLon = Math.toRadians(bLon - aLon)
+        val s1 = Math.sin(dLat / 2)
+        val s2 = Math.sin(dLon / 2)
+        val aa = s1 * s1 +
+                Math.cos(Math.toRadians(aLat)) *
+                Math.cos(Math.toRadians(bLat)) *
+                s2 * s2
+        val c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa))
+        return (R * c).toLong()
+    }
+
+    private fun findNearestCapstoneStation(lat: Double, lon: Double): Pair<FireStation, Long> {
+        return capstoneStations
+            .map { it to distanceMeters(lat, lon, it.latitude, it.longitude) }
+            .minBy { it.second }
+    }
+
+    private fun buildReportMessage(
+        name: String,
+        location: String,
+        fireReport: String,
+        stationName: String,            // destination (central)
+        nearestName: String?,           // optional metadata
+        nearestMeters: Long?
+    ): String {
         val (date, time) = getCurrentDateTime()
+        val nearestLine = if (nearestName != null && nearestMeters != null)
+            "\nNEAREST STATION SUGGESTION:\n$nearestName (${String.format(Locale.getDefault(), "%.1f", nearestMeters / 1000.0)} km)"
+        else ""
         return """
             FIRE REPORT SUBMITTED
 
-            NEAREST FIRE STATION:
-            $stationName
+            FIRE STATION (DESTINATION):
+            $stationName$nearestLine
 
             NAME:
             $name
@@ -155,48 +229,26 @@ class ReportSmsActivity : AppCompatActivity() {
         """.trimIndent()
     }
 
-    private fun stationNodeFor(name: String): String? {
-        val n = name.trim().lowercase()
-        return when {
-            "mabini" in n -> "MabiniFireStation"
-            "canocotan" in n -> "CanocotanFireStation"
-            "la filipina" in n || "lafilipina" in n -> "LaFilipinaFireStation"
-            else -> null
-        }
-    }
-
-    private fun smsChildNodeFor(stationName: String): String {
-        val n = stationName.trim().lowercase()
-        return when {
-            "mabini" in n -> "MabiniSmsReport"
-            "canocotan" in n -> "CanocotanSmsReport"
-            "la filipina" in n || "lafilipina" in n -> "LaFilipinaSmsReport"
-            else -> "SmsReport"
-        }
-    }
-
-    private fun contactForStationName(stationName: String): String? {
-        val target = stationName.trim().lowercase()
-        return fireStations.firstOrNull { it.name.trim().lowercase().contains(target) || target.contains(it.name.trim().lowercase()) }?.contact
-            ?: when {
-                "mabini" in target -> "09750647852"
-                "canocotan" in target -> "09663041569"
-                "la filipina" in target || "lafilipina" in target -> "09750647852"
-                else -> null
-            }
-    }
-
-    // Push to <StationNode>/<StationSmsChild>/<pushId> and embed the SMS number in the same report details
+    // Central storage (UNCHANGED path), now with nearest info added into the map
     private fun uploadPendingReports(db: AppDatabase) {
         val dao = db.reportDao()
-        val root = FirebaseDatabase.getInstance().reference
+        val ref = FirebaseDatabase.getInstance().reference
+            .child("TagumCityCentralFireStation")
+            .child("AllReport")
+            .child("SmsReport")
 
         CoroutineScope(Dispatchers.IO).launch {
             val pendingReports = dao.getPendingReports()
             for (report in pendingReports) {
-                val stationNode = stationNodeFor(report.fireStationName)
-                val smsChild = smsChildNodeFor(report.fireStationName)
-                val contactUsed = contactForStationName(report.fireStationName) ?: ""
+
+                // Compute nearest based on saved lat/lon
+                var nearestName: String? = null
+                var nearestDist: Long? = null
+                if (report.latitude != 0.0 || report.longitude != 0.0) {
+                    val (nearest, dist) = findNearestCapstoneStation(report.latitude, report.longitude)
+                    nearestName = nearest.name
+                    nearestDist = dist
+                }
 
                 val reportMap = mapOf(
                     "name" to report.name,
@@ -206,16 +258,13 @@ class ReportSmsActivity : AppCompatActivity() {
                     "time" to report.time,
                     "latitude" to report.latitude,
                     "longitude" to report.longitude,
-                    "fireStationName" to report.fireStationName,
-                    "contact" to contactUsed,        // embedded here
-                    "status" to "pending"
+                    "fireStationName" to station.name,           // CENTRAL as destination
+                    "contact" to station.contact,
+                    "status" to "Pending",
+                    // Extra metadata fields for ops/triage:
+                    "nearestStationName" to (nearestName ?: ""),
+                    "nearestStationDistanceMeters" to (nearestDist ?: -1L)
                 )
-
-                val ref = if (stationNode != null) {
-                    root.child(stationNode).child(smsChild)
-                } else {
-                    root.child(smsChild)
-                }
 
                 ref.push().setValue(reportMap)
                     .addOnSuccessListener {
@@ -225,25 +274,60 @@ class ReportSmsActivity : AppCompatActivity() {
         }
     }
 
+    // --- DATE AND TIME FORMAT FIX ---
+    private fun getCurrentDateTime(): Pair<String, String> {
+        // Date in MM-dd-yyyy format and time in 24-hour format HH:mm:ss
+        val dateFormat = SimpleDateFormat("MM-dd-yyyy", Locale.getDefault())
+        val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        val now = Date()
+        return Pair(dateFormat.format(now), timeFormat.format(now))
+    }
+
     private fun isInternetAvailable(): Boolean {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val info = cm.activeNetworkInfo
         return info != null && info.isConnected
     }
 
-    private fun getCurrentDateTime(): Pair<String, String> {
-        val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val sdfTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-        return Pair(sdfDate.format(Date()), sdfTime.format(Date()))
+    private fun isSimAvailable(): Boolean {
+        val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        return telephonyManager.simState == TelephonyManager.SIM_STATE_READY
     }
 
-    private fun isWithinTagumCity(loc: Location): Boolean {
-        val lat = loc.latitude
-        val lng = loc.longitude
-        return lat in TAGUM_LAT_MIN..TAGUM_LAT_MAX && lng in TAGUM_LNG_MIN..TAGUM_LNG_MAX
+    private fun getCurrentLocation(callback: (Location?) -> Unit) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) callback(location)
+                else requestLocationUpdates(callback)
+            }
+        } else {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
+        }
     }
 
-    private fun confirmSendSms(phoneNumber: String, message: String, userLocation: Location, stationName: String) {
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun requestLocationUpdates(callback: (Location?) -> Unit) {
+        val req = LocationRequest.create().apply {
+            interval = 10000
+            fastestInterval = 5000
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        }
+        fusedLocationClient.requestLocationUpdates(req, object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.let { callback(it) }
+                fusedLocationClient.removeLocationUpdates(this)
+            }
+        }, null)
+    }
+
+    private fun confirmSendSms(
+        phoneNumber: String,
+        message: String,
+        userLocation: Location,
+        stationName: String,
+        nearestStationForDb: FireStation,
+        nearestDistanceMetersForDb: Long
+    ) {
         AlertDialog.Builder(this)
             .setTitle("Send Report")
             .setMessage("Send this report via SMS?")
@@ -261,7 +345,7 @@ class ReportSmsActivity : AppCompatActivity() {
                     time = time,
                     latitude = userLocation.latitude,
                     longitude = userLocation.longitude,
-                    fireStationName = stationName
+                    fireStationName = stationName    // keep central in local entity
                 )
 
                 CoroutineScope(Dispatchers.IO).launch {
@@ -284,23 +368,23 @@ class ReportSmsActivity : AppCompatActivity() {
         }
         try {
             val smsManager = SmsManager.getDefault()
-
             val sentIntent = Intent(SMS_SENT_ACTION).apply {
                 putExtra(EXTRA_TO, phoneNumber)
                 putExtra(EXTRA_STATION, stationName)
             }
-            val flags = if (Build.VERSION.SDK_INT >= 23) {
+            val flags = if (Build.VERSION.SDK_INT >= 23)
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
+            else PendingIntent.FLAG_UPDATE_CURRENT
             val sentPI = PendingIntent.getBroadcast(this, 0, sentIntent, flags)
 
             if (message.length > 160) {
                 val parts = smsManager.divideMessage(message)
                 val sentIntents = MutableList(parts.size) { sentPI }
-                smsManager.sendMultipartTextMessage(phoneNumber, null, parts,
-                    sentIntents as ArrayList<PendingIntent?>?, null)
+                @Suppress("UNCHECKED_CAST")
+                smsManager.sendMultipartTextMessage(
+                    phoneNumber, null, parts,
+                    sentIntents as ArrayList<PendingIntent?>?, null
+                )
             } else {
                 smsManager.sendTextMessage(phoneNumber, null, message, sentPI, null)
             }
@@ -311,68 +395,77 @@ class ReportSmsActivity : AppCompatActivity() {
         }
     }
 
-    private fun isSimAvailable(): Boolean {
-        val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        return telephonyManager.simState == TelephonyManager.SIM_STATE_READY
-    }
+    // --- Tagum City Polygon Geofence ---
+    private fun loadTagumBoundaryFromRaw() {
+        try {
+            val ins = resources.openRawResource(R.raw.tagum_boundary)
+            val text = BufferedReader(InputStreamReader(ins)).use { it.readText() }
+            val root = JSONObject(text)
 
-    private fun checkPermissionsAndGetLocation() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            getCurrentLocation { }
-        } else {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_PERMISSION_REQUEST_CODE)
-        }
-    }
+            fun arrToRing(arr: JSONArray): List<LatLng> {
+                val out = ArrayList<LatLng>()
+                for (i in 0 until arr.length()) {
+                    val pt = arr.getJSONArray(i)
+                    val lon = pt.getDouble(0)
+                    val lat = pt.getDouble(1)
+                    out.add(LatLng(lat, lon))
+                }
+                return out
+            }
 
-    private fun getCurrentLocation(callback: (Location?) -> Unit) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                    callback(location)
-                } else {
-                    requestLocationUpdates(callback)
+            val rings = mutableListOf<List<LatLng>>()
+            when (root.optString("type")) {
+                "Polygon" -> {
+                    val coords = root.getJSONArray("coordinates")
+                    if (coords.length() > 0) rings.add(arrToRing(coords.getJSONArray(0)))
+                }
+                "MultiPolygon" -> {
+                    val mcoords = root.getJSONArray("coordinates")
+                    for (i in 0 until mcoords.length()) {
+                        val poly = mcoords.getJSONArray(i)
+                        if (poly.length() > 0) rings.add(arrToRing(poly.getJSONArray(0)))
+                    }
+                }
+                "FeatureCollection" -> {
+                    val feats = root.getJSONArray("features")
+                    for (i in 0 until feats.length()) {
+                        val geom = feats.getJSONObject(i).getJSONObject("geometry")
+                        val type = geom.getString("type")
+                        if (type == "Polygon") {
+                            val coords = geom.getJSONArray("coordinates")
+                            if (coords.length() > 0) rings.add(arrToRing(coords.getJSONArray(0)))
+                        }
+                    }
                 }
             }
+            tagumRings = rings
+            tagumLoaded = rings.isNotEmpty()
+        } catch (_: Exception) {
+            tagumRings = null
+            tagumLoaded = false
         }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-    private fun requestLocationUpdates(callback: (Location?) -> Unit) {
-        val req = LocationRequest.create().apply {
-            interval = 10000
-            fastestInterval = 5000
-            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-        }
-        fusedLocationClient.requestLocationUpdates(req, object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.lastLocation?.let { callback(it) }
-            }
-        }, null)
+    private fun isInsideTagum(loc: Location): Boolean {
+        if (!tagumLoaded) return false
+        val rings = tagumRings ?: return false
+        val pt = LatLng(loc.latitude, loc.longitude)
+        return rings.any { ring -> pointInRing(pt, ring) }
     }
 
-    private fun getNearestFireStation(userLocation: Location): FireStation {
-        var nearest: FireStation? = null
-        var shortest = Double.MAX_VALUE
-        for (s in fireStations) {
-            val stationLoc = Location("").apply { latitude = s.latitude; longitude = s.longitude }
-            val dist = userLocation.distanceTo(stationLoc).toDouble()
-            if (dist < shortest) { shortest = dist; nearest = s }
+    private fun pointInRing(pt: LatLng, ring: List<LatLng>): Boolean {
+        var inside = false
+        var j = ring.size - 1
+        for (i in ring.indices) {
+            val xi = ring[i].longitude
+            val yi = ring[i].latitude
+            val xj = ring[j].longitude
+            val yj = ring[j].latitude
+            val intersects = ((yi > pt.latitude) != (yj > pt.latitude)) &&
+                    (pt.longitude < (xj - xi) * (pt.latitude - yi) / ((yj - yi) + 0.0) + xi)
+            if (intersects) inside = !inside
+            j = i
         }
-        return nearest ?: fireStations.first()
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        when (requestCode) {
-            LOCATION_PERMISSION_REQUEST_CODE ->
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) getCurrentLocation { }
-                else Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
-            SMS_PERMISSION_REQUEST_CODE ->
-                Toast.makeText(
-                    this,
-                    if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) "SMS permission granted" else "SMS permission denied",
-                    Toast.LENGTH_SHORT
-                ).show()
-        }
+        return inside
     }
 }

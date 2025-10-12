@@ -5,6 +5,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:gravity="center_horizontal"
+    android:layout_marginLeft="50dp"
     android:paddingStart="8dp"
     android:paddingEnd="8dp">
 
@@ -12,18 +13,18 @@
         android:id="@+id/avatar"
         android:layout_width="56dp"
         android:layout_height="56dp"
-        android:src="@drawable/ic_logo"
+        android:src="@drawable/station_logo"
         android:scaleType="centerCrop"
         app:shapeAppearanceOverlay="@style/CircularShape" />
 
     <TextView
         android:id="@+id/stationName"
-        android:layout_width="90dp"
+        android:layout_width="150dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:ellipsize="end"
         android:maxLines="1"
         android:gravity="center"
-        android:text="Mabini"
+        android:text="Fire Station"
         android:textSize="12sp"/>
 </LinearLayout>

@@ -72,7 +72,7 @@
         <activity android:name=".DashboardActivity"/>
         <activity android:name=".FireLevelActivity"/>
         <activity android:name=".OtherEmergencyActivity"/>
-        <activity android:name=".VehicleAccidentActivity"/>
+        <activity android:name=".EmergencyMedicalServicesActivity"/>
         <activity android:name=".ReportSmsActivity"/>
         <activity
             android:name=".FireReportResponseActivity"
@@ -89,6 +89,7 @@
 
 
         <activity android:name=".EditProfileActivity"/>
+        <activity android:name=".FireFighterResponseActivity"/>
         <activity android:name=".EditFirefighterProfileActivity"/>
         <activity android:name=".ChangePasswordActivity"/>
         <activity android:name=".AboutAppActivity"/>

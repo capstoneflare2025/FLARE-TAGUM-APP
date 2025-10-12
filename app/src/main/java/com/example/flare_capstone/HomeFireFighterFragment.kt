@@ -10,7 +10,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import com.example.flare_capstone.databinding.FragmentHomeFireFighterBinding
 import com.google.android.gms.location.*
@@ -36,8 +38,6 @@ import kotlin.math.roundToInt
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import androidx.annotation.DrawableRes
-import androidx.core.graphics.drawable.DrawableCompat
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 
@@ -53,6 +53,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
 
     // Google Maps
     private var gMap: GoogleMap? = null
+    private var mapReady = false
 
     // Pins
     private var myMarker: Marker? = null
@@ -63,16 +64,19 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private var currentReportPoint: LatLng? = null
     private var lastMyPoint: LatLng? = null
 
-    // Stable numbering: key -> number; resets only when incidents become empty
+    // Stable numbering
     private val numberMap = mutableMapOf<String, Int>()
     private var nextNumber = 1
 
-    // Will hold a selection coming from the notification until data is ready
+    // Pending external selection
     private var pendingSelect: Pair<Source, String>? = null
 
-    private var mapReady = false
-    private val liveListeners = mutableListOf<Pair<Query, ChildEventListener>>()
+    // Firebase base
+    private var stationAccountKey: String? = null
+    private var reportsBase: String? = null
 
+    // child listeners
+    private val liveListeners = mutableListOf<Pair<Query, ChildEventListener>>()
 
     // All incidents in memory
     private data class Incident(
@@ -81,42 +85,19 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         val source: Source,
         val latLng: LatLng,
         val status: String,
-        val timestamp: Long      // epoch millis
+        val timestamp: Long
     )
     private val incidents = mutableMapOf<String, Incident>() // key -> incident
 
     // Route polylines
-    private data class OsrmRoute(
-        val points: List<LatLng>,
-        val durationSec: Long,
-        val distanceMeters: Long
-    )
+    private data class OsrmRoute(val points: List<LatLng>, val durationSec: Long, val distanceMeters: Long)
     private data class DrawnRoute(
         val polyline: Polyline,
         val route: OsrmRoute,
         var isPrimary: Boolean,
-        val isShortest: Boolean  // fixed label regardless of selection
+        val isShortest: Boolean
     )
     private val drawnRoutes = mutableListOf<DrawnRoute>()
-
-    // Station + DB paths
-    private var stationPrefix: String? = null
-    private var fireReportPath: String? = null
-    private var otherEmergencyPath: String? = null
-    private var smsReportPath: String? = null
-
-    // Listeners
-    private var fireListener: ValueEventListener? = null
-    private var otherListener: ValueEventListener? = null
-    private var smsListener: ValueEventListener? = null
-    private var fireQuery: Query? = null
-    private var otherQuery: Query? = null
-    private var smsQuery: Query? = null
-
-    // Cached snapshots for merge
-    private var fireSnap: DataSnapshot? = null
-    private var otherSnap: DataSnapshot? = null
-    private var smsSnap: DataSnapshot? = null
 
     // Camera recenter thresholds
     private var lastCameraMy: LatLng? = null
@@ -129,7 +110,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private var lastRoutedDest: LatLng? = null
     private val routeRecomputeMeters = 25f
 
-    private enum class Source { FIRE, OTHER, SMS }
+    private enum class Source { FIRE, OTHER, EMS, SMS }
 
     private val locationPerms = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -160,45 +141,33 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         // Attach a SupportMapFragment into mapContainer
         val existing = childFragmentManager.findFragmentById(binding.mapContainer.id) as? SupportMapFragment
         val mapFragment = existing ?: SupportMapFragment.newInstance().also {
-            childFragmentManager.beginTransaction()
-                .replace(binding.mapContainer.id, it)
-                .commit()
+            childFragmentManager.beginTransaction().replace(binding.mapContainer.id, it).commit()
             childFragmentManager.executePendingTransactions()
         }
         mapFragment.getMapAsync(this)
 
-        // Station select from email
-        stationPrefix = when (auth.currentUser?.email?.lowercase()) {
-            "mabiniff001@gmail.com"     -> "Mabini"
-            "lafilipinaff001@gmail.com" -> "LaFilipina"
-            "canocotanff001@gmail.com"  -> "Canocotan"
-            else -> null
-        }
-        if (stationPrefix == null) {
+        // Station account from email -> account key
+        stationAccountKey = stationAccountForEmail(auth.currentUser?.email?.lowercase())
+        if (stationAccountKey == null) {
             Log.w(TAG, "Unknown firefighter email; abort")
             return
         }
 
-        val base = "${stationPrefix}FireStation"
-        fireReportPath     = "$base/${stationPrefix}FireReport"
-        otherEmergencyPath = "$base/${stationPrefix}OtherEmergency"
-        smsReportPath      = "$base/${stationPrefix}SmsReport"   // e.g. MabiniFireStation/MabiniSmsReport
+        // Base path for all 4 report types
+        reportsBase = "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/$stationAccountKey/AllReport"
 
         binding.completed.setOnClickListener { markCompleted() }
 
         attachReportListeners()
         ensureLocationPermission()
 
-        // Tap the floating status bar to open details of the currently selected incident
+        // Tap the status bar to open the current incident details
         binding.selectedInfo.isClickable = true
         binding.selectedInfo.setOnClickListener {
-            selectedIncidentKey?.let { key ->
-                incidents[key]?.let { showIncidentDetails(it) }
-            }
+            selectedIncidentKey?.let { key -> incidents[key]?.let { showIncidentDetails(it) } }
         }
 
-
-        // Receive selection from DashboardFireFighterActivity
+        // Optional: receive selection from an Activity
         requireActivity().supportFragmentManager.setFragmentResultListener("select_incident", viewLifecycleOwner) { _, b ->
             val srcStr = b.getString("source") ?: return@setFragmentResultListener
             val id = b.getString("id") ?: return@setFragmentResultListener
@@ -206,50 +175,37 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             pendingSelect = src to id
             trySelectPendingSelection(showDetails = true)
         }
+    }
 
-
+    private fun stationAccountForEmail(email: String?): String? {
+        val e = email ?: return null
+        return when (e) {
+            // Mabini
+            "mabini01@gmail.com",
+            "mabiniff01@gmail.com",
+            "mabiniff001@gmail.com" -> "MabiniFireFighterAccount"
+            // La Filipina
+            "lafilipinaff01@gmail.com",
+            "lafilipinaff001@gmail.com" -> "LaFilipinaFireFighterAccount"
+            // Canocotan (kept for completeness)
+            "canocotanff01@gmail.com",
+            "canocotanff001@gmail.com" -> "CanocotanFireFighterAccount"
+            else -> null
+        }
     }
 
     private fun trySelectPendingSelection(showDetails: Boolean = false): Boolean {
         val p = pendingSelect ?: return false
         val (src, id) = p
         val key = "${src.name}/$id"
-        val inc = incidents[key] ?: return false  // still not loaded
-
+        val inc = incidents[key] ?: return false
         selectIncident(key, animateCamera = true)
         if (showDetails) showIncidentDetails(inc)
         pendingSelect = null
         return true
     }
 
-
-    // ---------- Helpers: time parsing ----------
-
-    private fun getEpochFromDateTime(node: DataSnapshot): Long? {
-        val dateStr = node.child("date").getValue(String::class.java)?.trim()
-        val timeStr = node.child("time").getValue(String::class.java)?.trim()
-        if (dateStr.isNullOrEmpty() || timeStr.isNullOrEmpty()) return null
-        return try {
-            val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            fmt.timeZone = TimeZone.getDefault()
-            fmt.parse("$dateStr $timeStr")?.time
-        } catch (_: Exception) { null }
-    }
-
-    // Normalize any seconds→milliseconds and support several fields.
-    private fun readTimestampMillis(node: DataSnapshot): Long? {
-        val raw = getLongRelaxed(node, "acceptedAt")
-            ?: getLongRelaxed(node, "timeStamp")
-            ?: getLongRelaxed(node, "timestamp")
-            ?: getLongRelaxed(node, "time")
-            ?: getEpochFromDateTime(node)
-            ?: return null
-        val ms = if (raw in 1..9_999_999_999L) raw * 1000 else raw
-        return if (ms > 0) ms else null
-    }
-
     // ---------- Lifecycle cleanup ----------
-
     override fun onDestroyView() {
         detachReportListeners()
         stopLocationUpdates()
@@ -258,7 +214,6 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     }
 
     // ---------- Permissions / MyLocation ----------
-
     private fun hasLocationPermission(): Boolean {
         val ctx = context ?: return false
         val fine = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -281,11 +236,10 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
                 gMap?.isMyLocationEnabled = true
                 gMap?.uiSettings?.isMyLocationButtonEnabled = true
             }
-        } catch (_: SecurityException) { /* ignore */ }
+        } catch (_: SecurityException) { }
     }
 
     // ---------- Map + Markers ----------
-
     override fun onMapReady(map: GoogleMap) {
         gMap = map
         mapReady = true
@@ -326,7 +280,6 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // Draw anything we already know (in case DB fired before the map was ready)
         renderAllIncidentsIfNeeded()
         trySelectPendingSelection()
         updatePins(lastMyPoint, currentReportPoint)
@@ -338,8 +291,6 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         val toRemove = incidentMarkers.keys - incidents.keys
         toRemove.forEach { k -> incidentMarkers.remove(k)?.remove() }
     }
-
-
 
     private fun updatePins(myLoc: LatLng?, reportLoc: LatLng?) {
         val map = gMap ?: return
@@ -358,7 +309,6 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // Camera (recenter if moved)
         val needRecenter =
             (lastCameraMy == null || (myLoc != null && distanceMeters(lastCameraMy!!, myLoc) > recenterMeters)) ||
                     (lastCameraIncident == null || (reportLoc != null && distanceMeters(lastCameraIncident!!, reportLoc) > recenterMeters))
@@ -383,7 +333,6 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
-        // Trigger routing if both points exist and moved enough
         val origin = lastMyPoint
         val dest = currentReportPoint
         if (origin != null && dest != null && shouldRecomputeRoutes(origin, dest)) {
@@ -401,9 +350,15 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private val locCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val last: Location = result.lastLocation ?: return
-            updatePins(LatLng(last.latitude, last.longitude), currentReportPoint)
+            val lat = last.latitude
+            val lng = last.longitude
+
+            updatePins(LatLng(lat, lng), currentReportPoint)
+            updateLiveLocation(lat, lng)  // 🔥 <-- new line
         }
     }
+
+
 
     private fun startLocationUpdates() {
         if (!hasLocationPermission()) return
@@ -421,34 +376,13 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         try { fusedLocation.removeLocationUpdates(locCallback) } catch (_: Exception) {}
     }
 
-    private fun isOngoing(status: String?): Boolean =
-        status?.trim()?.replace("-", "")?.equals("ongoing", ignoreCase = true) == true
-
+    // ---------- Firebase listeners for 4 types ----------
     private fun attachReportListeners() {
-        val firePath  = fireReportPath ?: return
-        val otherPath = otherEmergencyPath ?: return
-        val smsPath   = smsReportPath ?: return
-
-        listenLive(firePath,  Source.FIRE)
-        listenLive(otherPath, Source.OTHER)
-        listenLive(smsPath,   Source.SMS)
-    }
-
-    private fun listenLive(path: String, src: Source) {
-        // No server-side status filter → we decide “ongoing” per child to avoid races.
-        val q = FirebaseDatabase.getInstance().getReference(path).limitToLast(200)
-
-        val l = object : ChildEventListener {
-            override fun onChildAdded(s: DataSnapshot, prev: String?)  { applyChild(s, src) }
-            override fun onChildChanged(s: DataSnapshot, prev: String?) { applyChild(s, src) }
-            override fun onChildRemoved(s: DataSnapshot)               { removeChild(s.key, src) }
-            override fun onChildMoved(s: DataSnapshot, prev: String?) {}
-            override fun onCancelled(e: DatabaseError) {
-                Log.e(TAG, "listenLive[$path] cancelled: ${e.message}")
-            }
-        }
-        q.addChildEventListener(l)
-        liveListeners += q to l
+        val base = reportsBase ?: return
+        listenLive("$base/FireReport", Source.FIRE)
+        listenLive("$base/OtherEmergencyReport", Source.OTHER)
+        listenLive("$base/EmergencyMedicalServicesReport", Source.EMS)
+        listenLive("$base/SmsReport", Source.SMS)
     }
 
     private fun detachReportListeners() {
@@ -456,13 +390,29 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         liveListeners.clear()
     }
 
+    private fun listenLive(path: String, src: Source) {
+        val q = FirebaseDatabase.getInstance().getReference(path).limitToLast(200)
+        val l = object : ChildEventListener {
+            override fun onChildAdded(s: DataSnapshot, prev: String?)   = applyChild(s, src)
+            override fun onChildChanged(s: DataSnapshot, prev: String?) = applyChild(s, src)
+            override fun onChildRemoved(s: DataSnapshot)                = removeChild(s.key, src)
+            override fun onChildMoved(s: DataSnapshot, prev: String?) {}
+            override fun onCancelled(e: DatabaseError) { Log.e(TAG, "listenLive[$path] cancelled: ${e.message}") }
+        }
+        q.addChildEventListener(l)
+        liveListeners += q to l
+    }
+
+    private fun isOngoing(status: String?): Boolean =
+        status?.trim()?.replace("-", "")?.equals("ongoing", ignoreCase = true) == true
+
     private fun applyChild(c: DataSnapshot, src: Source) {
         val id = c.key ?: return
         val key = "${src.name}/$id"
 
         val status = c.child("status").getValue(String::class.java)
         if (!isOngoing(status)) {
-            removeChild(id, src)      // not ongoing → hide pin
+            removeChild(id, src)
             return
         }
 
@@ -480,11 +430,8 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         if (!numberMap.containsKey(key)) numberMap[key] = nextNumber++
 
         if (mapReady) addOrUpdateMarker(inc)
-        if (selectedIncidentKey == null || !incidents.containsKey(selectedIncidentKey)) {
-            ensureSelection()
-        }
+        if (selectedIncidentKey == null || !incidents.containsKey(selectedIncidentKey)) ensureSelection()
 
-        // If a pending selection matches this record, apply it now.
         pendingSelect?.let { (ps, pid) ->
             if (ps == src && pid == id) trySelectPendingSelection(showDetails = true)
         }
@@ -501,7 +448,6 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             clearAllRoutes()
             ensureSelection()
         }
-        // Optional: reset numbering when absolutely empty
         if (incidents.isEmpty()) {
             numberMap.clear()
             nextNumber = 1
@@ -513,12 +459,14 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         val number = numberMap[inc.key] ?: 0
         val title = when (inc.source) {
             Source.FIRE  -> "[FIRE REPORT #$number]"
-            Source.OTHER -> "[OTHER REPORT #$number]"
+            Source.OTHER -> "[OTHER EMERGENCY #$number]"
+            Source.EMS   -> "[EMS REPORT #$number]"
             Source.SMS   -> "[SMS REPORT #$number]"
         }
-        val iconRes = when (inc.source) {
+        @DrawableRes val iconRes = when (inc.source) {
             Source.FIRE  -> R.drawable.ic_pin_fire
             Source.OTHER -> R.drawable.ic_pin_other
+            Source.EMS   -> R.drawable.ic_pin_ems
             Source.SMS   -> R.drawable.ic_pin_sms
         }
         val icon = bitmapFromVector(iconRes)
@@ -544,20 +492,14 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-
-    // ---------- Firebase listeners (merge FireReport + OtherEmergency + SmsReports) ----------
-
-
+    // ---------- Selection ----------
     private fun ensureSelection() {
-        // keep current selection if it still exists
         selectedIncidentKey?.let {
             if (incidents.containsKey(it)) {
-                val sel = incidents[it]!!
-                selectIncident(sel.key, animateCamera = false)
+                selectIncident(it, animateCamera = false)
                 return
             }
         }
-        // otherwise pick the incident with the LOWEST assigned number
         val next = incidents.values.minByOrNull { numberMap[it.key] ?: Int.MAX_VALUE } ?: return
         selectIncident(next.key, animateCamera = true)
     }
@@ -567,22 +509,16 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         selectedIncidentKey = key
         currentReportPoint = inc.latLng
 
-        // Update status line and marker
         incidentMarkers[key]?.snippet = "Status: ${inc.status}"
         updateSelectedInfo()
 
         if (animateCamera) {
-            try {
-                gMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(inc.latLng, 15f))
-            } catch (_: Exception) {}
+            try { gMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(inc.latLng, 15f)) } catch (_: Exception) {}
         }
-
-        // trigger routing
         updatePins(lastMyPoint, currentReportPoint)
     }
 
     // ---------- Firebase value helpers ----------
-
     private fun getDoubleRelaxed(node: DataSnapshot, key: String): Double? {
         val v = node.child(key).value
         return when (v) {
@@ -601,30 +537,69 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    // ---------- Complete ----------
+    private fun getEpochFromDateTime(node: DataSnapshot): Long? {
+        val dateStr = node.child("date").getValue(String::class.java)?.trim()
+        val timeStr = node.child("time").getValue(String::class.java)?.trim()
+        if (dateStr.isNullOrEmpty() || timeStr.isNullOrEmpty()) return null
+        return try {
+            val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            fmt.timeZone = TimeZone.getDefault()
+            fmt.parse("$dateStr $timeStr")?.time
+        } catch (_: Exception) { null }
+    }
 
+    // Normalize seconds→milliseconds
+    private fun readTimestampMillis(node: DataSnapshot): Long? {
+        val raw = getLongRelaxed(node, "acceptedAt")
+            ?: getLongRelaxed(node, "timeStamp")
+            ?: getLongRelaxed(node, "timestamp")
+            ?: getLongRelaxed(node, "time")
+            ?: getEpochFromDateTime(node)
+            ?: return null
+        val ms = if (raw in 1..9_999_999_999L) raw * 1000 else raw
+        return if (ms > 0) ms else null
+    }
+
+    // ---------- Complete ----------
     private fun markCompleted() {
         val key = selectedIncidentKey ?: return
         val inc = incidents[key] ?: return
+        val baseFF = reportsBase ?: return  // station-scoped base
 
-        val path = when (inc.source) {
-            Source.FIRE  -> fireReportPath
-            Source.OTHER -> otherEmergencyPath
-            Source.SMS   -> smsReportPath
-        } ?: return
+        val typeNode = when (inc.source) {
+            Source.FIRE  -> "FireReport"
+            Source.OTHER -> "OtherEmergencyReport"
+            Source.EMS   -> "EmergencyMedicalServicesReport"
+            Source.SMS   -> "SmsReport"
+        }
 
-        FirebaseDatabase.getInstance()
-            .getReference("$path/${inc.id}")
-            .child("status")
-            .setValue("Completed")
+        // Central AllReport base
+        val baseCentral = "TagumCityCentralFireStation/AllReport"
 
-        // Local cleanup will happen on the next onDataChange
-        Log.d(TAG, "Marked completed id=${inc.id} src=${inc.source}")
-        Toast.makeText(requireContext(), "Marked as Completed", Toast.LENGTH_SHORT).show()
+        // Fan-out: update both the station-scoped and central paths together
+        val updates = hashMapOf<String, Any>(
+            "$baseFF/$typeNode/${inc.id}/status" to "Completed",
+            "$baseCentral/$typeNode/${inc.id}/status" to "Completed"
+            // Optional: record a completion timestamp too
+            // "$baseFF/$typeNode/${inc.id}/completedAt" to ServerValue.TIMESTAMP,
+            // "$baseCentral/$typeNode/${inc.id}/completedAt" to ServerValue.TIMESTAMP
+        )
+
+        FirebaseDatabase.getInstance().reference
+            .updateChildren(updates)
+            .addOnSuccessListener {
+                Toast.makeText(requireContext(), "Marked as Completed", Toast.LENGTH_SHORT).show()
+                Log.d(TAG, "Completed id=${inc.id} src=${inc.source} (both station + central)")
+                // Removal from the map will follow from ChildChanged/Removed listeners
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(requireContext(), "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Log.w(TAG, "Complete failed: ${e.message}")
+            }
     }
 
-    // ---------- OSRM routing (show multiple alternatives) ----------
 
+    // ---------- OSRM routing ----------
     private fun shouldRecomputeRoutes(origin: LatLng, dest: LatLng): Boolean {
         val prevO = lastRoutedOrigin
         val prevD = lastRoutedDest
@@ -654,9 +629,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
                     return@runOnUiThread
                 }
 
-                // Sort by distance ascending (or duration if you prefer fastest)
                 val sorted = all.sortedBy { it.distanceMeters }
-
                 sorted.forEachIndexed { index, r ->
                     val isPrimary = index == 0
                     val polyOpts = PolylineOptions()
@@ -666,24 +639,15 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
                         .zIndex(if (isPrimary) 2f else 1f)
                         .clickable(true)
 
-                    if (!isPrimary) {
-                        polyOpts.pattern(listOf(Dot(), Gap(14f))) // dashed for alternatives
-                    }
+                    if (!isPrimary) polyOpts.pattern(listOf(Dot(), Gap(14f)))
 
                     val pl = map.addPolyline(polyOpts)
-                    drawnRoutes += DrawnRoute(
-                        polyline = pl,
-                        route = r,
-                        isPrimary = isPrimary,
-                        isShortest = index == 0
-                    )
+                    drawnRoutes += DrawnRoute(pl, r, isPrimary, isShortest = index == 0)
                 }
 
-                // Update info on selected marker + status text with primary route stats
-                val chosen = drawnRoutes.firstOrNull { it.isPrimary }?.route
-                if (chosen != null) {
-                    val mins = max(1, (chosen.durationSec / 60).toInt())
-                    val km = (chosen.distanceMeters / 100.0).roundToInt() / 10.0
+                drawnRoutes.firstOrNull { it.isPrimary }?.route?.let { r ->
+                    val mins = max(1, (r.durationSec / 60).toInt())
+                    val km = (r.distanceMeters / 100.0).roundToInt() / 10.0
                     selectedIncidentKey?.let { key ->
                         incidentMarkers[key]?.let { mk ->
                             mk.snippet = "${mins}m • ${km}km"
@@ -697,21 +661,13 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun fetchOsrmRoutes(origin: LatLng, dest: LatLng): List<OsrmRoute> {
-        val servers = listOf(
-            "https://router.project-osrm.org",
-            "https://routing.openstreetmap.de/routed-car"
-        )
+        val servers = listOf("https://router.project-osrm.org", "https://routing.openstreetmap.de/routed-car")
         val extras = listOf("&exclude=ferry", "")
-
-        for (base in servers) {
-            for (extra in extras) {
-                val urlStr = "$base/route/v1/driving/" +
-                        "${origin.longitude},${origin.latitude};${dest.longitude},${dest.latitude}" +
-                        "?overview=full&geometries=polyline&steps=false&alternatives=true&continue_straight=true$extra"
-
-                val res = runCatching { requestOsrmAll(urlStr) }.getOrNull()
-                if (!res.isNullOrEmpty()) return res
-            }
+        for (base in servers) for (extra in extras) {
+            val urlStr = "$base/route/v1/driving/${origin.longitude},${origin.latitude};${dest.longitude},${dest.latitude}" +
+                    "?overview=full&geometries=polyline&steps=false&alternatives=true&continue_straight=true$extra"
+            val res = runCatching { requestOsrmAll(urlStr) }.getOrNull()
+            if (!res.isNullOrEmpty()) return res
         }
         return emptyList()
     }
@@ -719,11 +675,8 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private fun requestOsrmAll(urlStr: String): List<OsrmRoute> {
         var conn: HttpURLConnection? = null
         return try {
-            val url = URL(urlStr)
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 15000
-                readTimeout = 20000
+            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"; connectTimeout = 15000; readTimeout = 20000
             }
             val code = conn.responseCode
             val reader = (if (code in 200..299) conn.inputStream else conn.errorStream)
@@ -772,9 +725,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         target.polyline.zIndex = 2f
 
         try {
-            val b = LatLngBounds.builder().apply {
-                target.route.points.forEach { include(it) }
-            }.build()
+            val b = LatLngBounds.builder().apply { target.route.points.forEach { include(it) } }.build()
             map.animateCamera(CameraUpdateFactory.newLatLngBounds(b, 120))
         } catch (_: Exception) {}
     }
@@ -784,31 +735,18 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         drawnRoutes.clear()
     }
 
-    // Polyline precision 5 (OSRM default) -> List<LatLng>
+    // Polyline precision 5 decoder
     private fun decodePolylineE5ToLatLng(encoded: String): List<LatLng> {
         if (encoded.isEmpty()) return emptyList()
         val path = ArrayList<LatLng>()
-        var index = 0
-        var lat = 0
-        var lng = 0
+        var index = 0; var lat = 0; var lng = 0
         while (index < encoded.length) {
-            var result = 0
-            var shift = 0
-            var b: Int
-            do {
-                b = encoded[index++].code - 63
-                result = result or ((b and 0x1f) shl shift)
-                shift += 5
-            } while (b >= 0x20)
+            var result = 0; var shift = 0; var b: Int
+            do { b = encoded[index++].code - 63; result = result or ((b and 0x1f) shl shift); shift += 5 } while (b >= 0x20)
             val dlat = if ((result and 1) != 0) (result shr 1).inv() else result shr 1
             lat += dlat
-            result = 0
-            shift = 0
-            do {
-                b = encoded[index++].code - 63
-                result = result or ((b and 0x1f) shl shift)
-                shift += 5
-            } while (b >= 0x20)
+            result = 0; shift = 0
+            do { b = encoded[index++].code - 63; result = result or ((b and 0x1f) shl shift); shift += 5 } while (b >= 0x20)
             val dlng = if ((result and 1) != 0) (result shr 1).inv() else result shr 1
             lng += dlng
             path.add(LatLng(lat / 1E5, lng / 1E5))
@@ -817,10 +755,10 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     }
 
     // ---------- UI helpers ----------
-
     private fun sourceLabel(src: Source): String = when (src) {
         Source.FIRE  -> "FIRE"
         Source.OTHER -> "OTHER"
+        Source.EMS   -> "EMS"
         Source.SMS   -> "SMS"
     }
 
@@ -833,29 +771,10 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         val inc = incidents[key]!!
         val no = numberMap[key] ?: 0
         val base = "${sourceLabel(inc.source)} #$no • ${inc.status}"
-        binding.selectedInfo.text = if (etaMins != null && distKm != null) {
-            "$base • ${etaMins}m • ${distKm}km"
-        } else base
+        binding.selectedInfo.text = if (etaMins != null && distKm != null) "$base • ${etaMins}m • ${distKm}km" else base
     }
 
     // ---------- Bitmap helpers ----------
-
-    private fun pinIcon(@DrawableRes resId: Int, colorHex: String): BitmapDescriptor {
-        val ctx = requireContext()
-        val base = ContextCompat.getDrawable(ctx, resId)!!.mutate()
-        val wrapped = DrawableCompat.wrap(base)
-        DrawableCompat.setTint(wrapped, Color.parseColor(colorHex))
-        val bmp = Bitmap.createBitmap(
-            wrapped.intrinsicWidth.coerceAtLeast(48),
-            wrapped.intrinsicHeight.coerceAtLeast(48),
-            Bitmap.Config.ARGB_8888
-        )
-        val canvas = Canvas(bmp)
-        wrapped.setBounds(0, 0, canvas.width, canvas.height)
-        wrapped.draw(canvas)
-        return BitmapDescriptorFactory.fromBitmap(bmp)
-    }
-
     private fun bitmapFromVector(@DrawableRes id: Int): BitmapDescriptor {
         val d = ContextCompat.getDrawable(requireContext(), id)!!.mutate()
         val bmp = Bitmap.createBitmap(
@@ -870,35 +789,32 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun showIncidentDetails(inc: Incident) {
-        val path = when (inc.source) {
-            Source.FIRE  -> fireReportPath
-            Source.OTHER -> otherEmergencyPath
-            Source.SMS   -> smsReportPath
-        } ?: run {
-            Toast.makeText(requireContext(), "Missing DB path", Toast.LENGTH_SHORT).show()
+        val base = reportsBase ?: run {
+            Toast.makeText(requireContext(), "Missing DB base", Toast.LENGTH_SHORT).show()
             return
         }
-
-        val ref = FirebaseDatabase.getInstance().getReference("$path/${inc.id}")
+        val typeNode = when (inc.source) {
+            Source.FIRE  -> "FireReport"
+            Source.OTHER -> "OtherEmergencyReport"
+            Source.EMS   -> "EmergencyMedicalServicesReport"
+            Source.SMS   -> "SmsReport"
+        }
+        val ref = FirebaseDatabase.getInstance().getReference("$base/$typeNode/${inc.id}")
 
         ref.addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val exactLocation = snapshot.child("exactLocation").getValue(String::class.java)
-                    ?: snapshot.child("location").getValue(String::class.java)
-                    ?: "-"
+                    ?: snapshot.child("location").getValue(String::class.java) ?: "-"
 
                 val date = snapshot.child("date").getValue(String::class.java) ?: "-"
 
                 val contact = snapshot.child("contact").getValue(String::class.java)
                     ?: snapshot.child("contactNumber").getValue(String::class.java)
-                    ?: snapshot.child("phone").getValue(String::class.java)
-                    ?: "-"
+                    ?: snapshot.child("phone").getValue(String::class.java) ?: "-"
 
                 val name = snapshot.child("name").getValue(String::class.java)
-                    ?: snapshot.child("reporterName").getValue(String::class.java)
-                    ?: "-"
+                    ?: snapshot.child("reporterName").getValue(String::class.java) ?: "-"
 
-                // Show emergencyType for OTHER (and for others if present)
                 val emergencyType: String? = snapshot.child("emergencyType").getValue(String::class.java)
                     ?: snapshot.child("type").getValue(String::class.java)
 
@@ -915,7 +831,6 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
                 val body = buildString {
                     appendLine("Exact location: $exactLocation")
                     appendLine("Date: $date")
-                    // Only print this line if we actually have a value
                     emergencyType?.let { appendLine("Emergency type: $it") }
                     appendLine("Contact: $contact")
                     appendLine("Name: $name")
@@ -936,13 +851,33 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         })
     }
 
-
     private fun formatLocalTime(epochMs: Long): String {
         return try {
             val sdf = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
             sdf.timeZone = java.util.TimeZone.getDefault()
             sdf.format(java.util.Date(epochMs))
         } catch (_: Exception) { "-" }
+    }
+
+    private fun updateLiveLocation(lat: Double, lng: Double) {
+        val key = stationAccountKey ?: return
+        val path =
+            "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount/$key/liveLocation"
+
+        val ref = FirebaseDatabase.getInstance().getReference(path)
+        val data = mapOf(
+            "latitude" to lat,
+            "longitude" to lng,
+            "updatedAt" to ServerValue.TIMESTAMP
+        )
+
+        ref.setValue(data)
+            .addOnSuccessListener {
+                Log.d(TAG, "Live location updated for $key: ($lat, $lng)")
+            }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "Failed to update live location: ${e.message}")
+            }
     }
 
 

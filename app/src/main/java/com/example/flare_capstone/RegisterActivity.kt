@@ -18,7 +18,6 @@ import com.example.flare_capstone.databinding.ActivityRegisterBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
-import kotlin.jvm.java
 
 class RegisterActivity : AppCompatActivity() {
 
@@ -38,6 +37,7 @@ class RegisterActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         database = FirebaseDatabase.getInstance().getReference("Users")
 
+        // Contact field: digits only, 11 chars, and live validation
         binding.contact.keyListener = DigitsKeyListener.getInstance("0123456789")
         binding.contact.filters = arrayOf(InputFilter.LengthFilter(11))
         attachContactWatcher()
@@ -46,8 +46,8 @@ class RegisterActivity : AppCompatActivity() {
 
         setupPasswordToggle(binding.password)
         setupPasswordToggle(binding.confirmPassword)
-        binding.password.compoundDrawablePadding = 14 // match your EditText padding
-        binding.confirmPassword.compoundDrawablePadding = 14 // match your EditText padding
+        binding.password.compoundDrawablePadding = 14
+        binding.confirmPassword.compoundDrawablePadding = 14
 
         binding.loginButton.setOnClickListener {
             startActivity(Intent(this, LoginActivity::class.java))
@@ -62,11 +62,12 @@ class RegisterActivity : AppCompatActivity() {
         binding.register.setOnClickListener {
             val name = binding.name.text.toString().trim()
             val email = binding.email.text.toString().trim()
-            val contact = binding.contact.text.toString().trim()
+            val contactRaw = binding.contact.text.toString().trim()
+            val contact = normalizePh(contactRaw)
             val password = binding.password.text.toString()
             val confirmPassword = binding.confirmPassword.text.toString()
 
-            // ---- validations (yours, unchanged) ----
+            // ---- validations ----
             if (name.isEmpty() || email.isEmpty() || contact.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
                 if (name.isEmpty()) binding.name.error = "Required"
                 if (email.isEmpty()) binding.email.error = "Required"
@@ -106,54 +107,71 @@ class RegisterActivity : AppCompatActivity() {
             } else binding.confirmPassword.error = null
             // ---- end validations ----
 
-            // 1) Check if email already has an Auth account
-            auth.fetchSignInMethodsForEmail(email)
-                .addOnSuccessListener { res ->
-                    val methods = res.signInMethods ?: emptyList()
-                    if (methods.isEmpty()) {
-                        // Brand-new → create + send verify (no DB write yet)
-                        createUserAndSendVerify(email, password, name, contact)
-                        return@addOnSuccessListener
-                    }
+            // UX pre-check: ensure contact is not already claimed (non-authoritative)
+            ensureContactFree(contact) {
+                // 1) Check if email already has an Auth account
+                auth.fetchSignInMethodsForEmail(email)
+                    .addOnSuccessListener { res ->
+                        val methods = res.signInMethods ?: emptyList()
+                        if (methods.isEmpty()) {
+                            // Brand-new → create + send verify (no DB write yet)
+                            createUserAndSendVerify(email, password, name, contact)
+                            return@addOnSuccessListener
+                        }
 
-                    // 2) Account exists → try to sign in with the provided password
-                    auth.signInWithEmailAndPassword(email, password)
-                        .addOnSuccessListener {
-                            val user = auth.currentUser ?: return@addOnSuccessListener
-                            user.reload().addOnCompleteListener {
-                                val verified = user.isEmailVerified
-                                if (verified) {
-                                    // Already verified → tell them to log in normally
-                                    toast("Email is already verified. Please log in.")
-                                    auth.signOut()
-                                    startActivity(Intent(this, LoginActivity::class.java))
-                                    finish()
-                                } else {
-                                    // Not verified → show “Pending Verification” dialog
-                                    showPendingVerificationDialog(
-                                        email = email,
-                                        name = name,
-                                        contact = contact,
-                                        canResend = true // password was correct → we can resend
-                                    )
+                        // 2) Account exists → try to sign in with the provided password
+                        auth.signInWithEmailAndPassword(email, password)
+                            .addOnSuccessListener {
+                                val user = auth.currentUser ?: return@addOnSuccessListener
+                                user.reload().addOnCompleteListener {
+                                    val verified = user.isEmailVerified
+                                    if (verified) {
+                                        toast("Email is already verified. Please log in.")
+                                        auth.signOut()
+                                        startActivity(Intent(this, LoginActivity::class.java))
+                                        finish()
+                                    } else {
+                                        // Not verified → show dialog, allow resend
+                                        showPendingVerificationDialog(
+                                            email = email,
+                                            name = name,
+                                            contact = contact,
+                                            canResend = true
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        .addOnFailureListener {
-                            // Wrong password or sign-in blocked → we can’t resend, but inform and offer Reset
-                            showPendingVerificationDialog(
-                                email = email,
-                                name = name,
-                                contact = contact,
-                                canResend = false // need correct password to resend from client
-                            )
-                        }
-                }
-                .addOnFailureListener { e ->
-                    toast("Couldn’t check email: ${e.message}")
-                }
+                            .addOnFailureListener {
+                                // Wrong password or blocked → cannot resend from client
+                                showPendingVerificationDialog(
+                                    email = email,
+                                    name = name,
+                                    contact = contact,
+                                    canResend = false
+                                )
+                            }
+                    }
+                    .addOnFailureListener { e ->
+                        toast("Couldn’t check email: ${e.message}")
+                    }
+            }
         }
+    }
 
+    // === UX pre-check for contact uniqueness (optional but friendly) ===
+    private fun ensureContactFree(contact: String, onFree: () -> Unit) {
+        FirebaseDatabase.getInstance().getReference("contactsIndex")
+            .child(contact)
+            .get()
+            .addOnSuccessListener { snap ->
+                if (snap.exists()) {
+                    binding.contact.error = "Contact already in use"
+                    toast("Contact already in use")
+                } else {
+                    onFree()
+                }
+            }
+            .addOnFailureListener { e -> toast("Contact check failed: ${e.message}") }
     }
 
     private fun createUserAndSendVerify(email: String, password: String, name: String, contact: String) {
@@ -172,7 +190,7 @@ class RegisterActivity : AppCompatActivity() {
                         val i = Intent(this, VerifyEmailActivity::class.java).apply {
                             putExtra("name", name)
                             putExtra("email", email)
-                            putExtra("contact", contact)
+                            putExtra("contact", contact) // normalized
                         }
                         startActivity(i)
                         finish()
@@ -201,7 +219,6 @@ class RegisterActivity : AppCompatActivity() {
             .apply {
                 if (canResend) {
                     setPositiveButton("Resend link") { _, _ ->
-                        // Current user is signed in at this point (password was correct)
                         val u = auth.currentUser
                         if (u == null) {
                             toast("No user session to resend.")
@@ -210,7 +227,6 @@ class RegisterActivity : AppCompatActivity() {
                         u.sendEmailVerification()
                             .addOnSuccessListener {
                                 toast("Verification link re-sent to $email")
-                                // Go to verify screen with the entered details (we’ll write DB after verify)
                                 val i = Intent(this@RegisterActivity, VerifyEmailActivity::class.java).apply {
                                     putExtra("name", name)
                                     putExtra("email", email)
@@ -224,7 +240,6 @@ class RegisterActivity : AppCompatActivity() {
                             }
                     }
                 } else {
-                    // We can't resend without a successful sign-in → offer Reset Password
                     setPositiveButton("Reset password") { _, _ ->
                         auth.sendPasswordResetEmail(email)
                             .addOnSuccessListener { toast("Password reset email sent to $email") }
@@ -233,20 +248,17 @@ class RegisterActivity : AppCompatActivity() {
                 }
 
                 setNegativeButton("Use different email") { _, _ ->
-                    // Sign out if we happened to sign the user in earlier
                     auth.signOut()
-                    // Let them edit the email field; no navigation needed
                 }
 
-                setNeutralButton("OK") { _, _ ->
-                    // Just close; keep current state
-                }
+                setNeutralButton("OK") { _, _ -> }
             }
             .create()
 
         dlg.show()
     }
 
+    // ===== UI helpers & validation =====
 
     private fun attachContactWatcher() {
         binding.contact.addTextChangedListener(object : TextWatcher {
@@ -332,6 +344,9 @@ class RegisterActivity : AppCompatActivity() {
     private fun setEndIcon(editText: EditText, iconRes: Int) {
         editText.setCompoundDrawablesWithIntrinsicBounds(0, 0, iconRes, 0)
     }
+
+    private fun normalizePh(contact: String): String =
+        contact.trim().replace(" ", "").replace("-", "")
 
     private fun toast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

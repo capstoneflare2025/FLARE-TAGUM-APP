@@ -3,11 +3,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <group android:checkableBehavior="single">
-        <item
-            android:id="@+id/nav_home"
-            android:title="Home"
-            android:icon="@drawable/ic_home_24"
-            app:showAsAction="never"/>
 
         <item
             android:id="@+id/nav_report_fire"
@@ -16,15 +11,21 @@
             app:showAsAction="never"/>
 
         <item
-            android:id="@+id/nav_my_reports"
-            android:title="My Reports"
-            android:icon="@drawable/ic_inbox_24"
+            android:id="@+id/nav_report_other"
+            android:title="Report Other Emerency"
+            android:icon="@drawable/ic_fire_24"
             app:showAsAction="never"/>
 
         <item
-            android:id="@+id/nav_settings"
-            android:title="Settings"
-            android:icon="@drawable/ic_settings_24"
+            android:id="@+id/nav_report_ems"
+            android:title="Report Emergency Medical"
+            android:icon="@drawable/ic_fire_24"
+            app:showAsAction="never"/>
+
+        <item
+            android:id="@+id/nav_my_reports"
+            android:title="My Reports"
+            android:icon="@drawable/ic_inbox_24"
             app:showAsAction="never"/>
 
         <item
