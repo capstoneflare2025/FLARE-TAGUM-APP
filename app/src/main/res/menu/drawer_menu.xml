@@ -35,9 +35,4 @@
             app:showAsAction="never"/>
     </group>
 
-    <item
-        android:id="@+id/nav_logout"
-        android:title="Logout"
-        android:icon="@drawable/ic_logout_24"
-        app:showAsAction="never"/>
 </menu>

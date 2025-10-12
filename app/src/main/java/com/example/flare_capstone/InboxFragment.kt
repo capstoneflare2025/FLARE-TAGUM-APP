@@ -58,29 +58,6 @@ class InboxFragment : Fragment() {
     private fun normStation(s: String?): String =
         (s ?: "").lowercase(Locale.getDefault()).replace(Regex("[^a-z0-9]"), "")
 
-    private val micPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) startVoiceRecognition()
-        else Toast.makeText(context, "Microphone permission denied", Toast.LENGTH_SHORT).show()
-    }
-
-    private val voiceLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val speech = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                ?.trim()
-                .orEmpty()
-            if (speech.isNotEmpty()) {
-                _binding?.let { b ->
-                    b.searchInput.setText(speech)
-                    b.searchInput.setSelection(b.searchInput.text?.length ?: 0)
-                }
-            }
-        }
-    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentInboxBinding.inflate(inflater, container, false)
@@ -134,10 +111,7 @@ class InboxFragment : Fragment() {
             }
             applyFilter()
         }
-        binding.searchBar.setOnClickListener { focusAndShowKeyboard(binding.searchInput) }
-        binding.voiceBtn.setOnClickListener {
-            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-        }
+
 
         loadUserAndAttach()
     }
@@ -333,26 +307,6 @@ class InboxFragment : Fragment() {
         _binding?.noMessagesText?.visibility = if (visibleMessages.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    private fun startVoiceRecognition() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Say station name")
-        }
-        try { voiceLauncher.launch(intent) }
-        catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "Voice input not available on this device", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun focusAndShowKeyboard(view: View) {
-        view.requestFocus()
-        view.post {
-            if (!isAdded) return@post
-            val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
-        }
-    }
 
     private fun updateInboxBadge(count: Int) {
         if (!isAdded) return

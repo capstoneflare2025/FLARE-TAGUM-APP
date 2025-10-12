@@ -37,7 +37,6 @@ class InboxFireFighterFragment : Fragment() {
 
         recyclerView = view.findViewById(R.id.recyclerView)
         emptyText = view.findViewById(R.id.noMessagesText)
-        searchInput = view.findViewById(R.id.searchInput)
 
         recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
