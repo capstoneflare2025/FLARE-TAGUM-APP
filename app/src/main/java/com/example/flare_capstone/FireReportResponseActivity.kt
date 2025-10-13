@@ -23,7 +23,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -619,10 +618,7 @@ class FireReportResponseActivity : AppCompatActivity() {
                 ).apply {
                     width = (resources.displayMetrics.density * 200).toInt()
                 }
-                setOnLongClickListener {
-                    showMessageOptionsPopup(this, key, message, isReply, isImage = false)
-                    true
-                }
+
             }
             messageLayout.addView(messageTextView)
         }
@@ -644,10 +640,6 @@ class FireReportResponseActivity : AppCompatActivity() {
                 }
                 adjustViewBounds = true
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setOnLongClickListener {
-                    showMessageOptionsPopup(this, key, message, isReply, isImage = true)
-                    true
-                }
             }
             messageLayout.addView(imageView)
         }
@@ -719,75 +711,6 @@ class FireReportResponseActivity : AppCompatActivity() {
             }
     }
 
-    private fun showMessageOptionsPopup(
-        anchorView: View,
-        key: String,
-        currentMessage: String,
-        isReply: Boolean,
-        isImage: Boolean
-    ) {
-        val popup = PopupMenu(this, anchorView)
-        if (isImage) {
-            popup.menuInflater.inflate(R.menu.message_options_delete_only, popup.menu)
-        } else {
-            popup.menuInflater.inflate(R.menu.message_options_menu, popup.menu)
-        }
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.menu_edit -> {
-                    if (!isImage) {
-                        showEditMessageDialog(key, currentMessage, isReply)
-                        true
-                    } else false
-                }
-                R.id.menu_delete -> {
-                    confirmDeleteMessage(key)
-                    true
-                }
-                else -> false
-            }
-        }
-        popup.show()
-    }
-
-    private fun showEditMessageDialog(key: String, currentMessage: String, isReply: Boolean) {
-        val editText = EditText(this).apply {
-            setText(currentMessage)
-            setSelection(currentMessage.length)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Edit Message")
-            .setView(editText)
-            .setPositiveButton("Save") { _, _ ->
-                val newText = editText.text.toString().trim()
-                if (newText.isNotEmpty()) editMessage(key, newText, isReply)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun confirmDeleteMessage(key: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Delete Message")
-            .setMessage("Are you sure you want to delete this message for everyone?")
-            .setPositiveButton("Delete") { _, _ -> deleteMessage(key) }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun editMessage(key: String, newText: String, isReply: Boolean) {
-        messagesPath().child(key).child("text").setValue(newText)
-            .addOnCompleteListener { task ->
-                Toast.makeText(this, if (task.isSuccessful) "Message updated" else "Failed to update message", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    private fun deleteMessage(key: String) {
-        messagesPath().child(key).removeValue()
-            .addOnCompleteListener { task ->
-                Toast.makeText(this, if (task.isSuccessful) "Message deleted" else "Failed to delete message", Toast.LENGTH_SHORT).show()
-            }
-    }
 
     override fun onDestroy() {
         super.onDestroy()
