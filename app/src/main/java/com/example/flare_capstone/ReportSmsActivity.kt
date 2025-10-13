@@ -235,23 +235,18 @@ class ReportSmsActivity : AppCompatActivity() {
         return """
             FIRE REPORT SUBMITTED
 
-            FIRE STATION (DESTINATION):
-            $stationName$nearestLine
+            FIRE STATION: $stationName
 
-            NAME:
-            $name
-
-            LOCATION:
-            $location
-
-            REPORT DETAILS:
-            $fireReport
-
-            DATE:
-            $date
-
-            TIME:
-            $time
+            NAME: $name
+            
+            LOCATION: $location
+           
+            REPORT DETAILS: $fireReport
+            
+            DATE: $date
+           
+            TIME: $time
+          
         """.trimIndent()
     }
 
