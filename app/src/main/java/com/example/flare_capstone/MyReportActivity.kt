@@ -117,28 +117,6 @@ class MyReportActivity : AppCompatActivity(), ReportAdapter.OnItemClickListener 
             }
             applyFilters()
         }
-
-        binding.dateRangeBtn.setOnClickListener {
-            val picker = MaterialDatePicker.Builder.dateRangePicker()
-                .setTitleText("Select date range")
-                .build()
-
-            picker.addOnPositiveButtonClickListener { range ->
-                dateFromMillis = range.first
-                dateToMillis = range.second?.plus(86_400_000L - 1)
-                binding.dateRangeBtn.text = picker.headerText
-                applyFilters()
-            }
-            picker.show(supportFragmentManager, "dateRangePicker")
-        }
-
-        binding.dateRangeBtn.setOnLongClickListener {
-            dateFromMillis = null
-            dateToMillis = null
-            binding.dateRangeBtn.text = "Date range"
-            applyFilters()
-            true
-        }
     }
 
     private fun normalizePhone(s: String?): String = s?.filter { it.isDigit() } ?: ""
@@ -387,10 +365,13 @@ class MyReportActivity : AppCompatActivity(), ReportAdapter.OnItemClickListener 
     }
 
     override fun onFireReportClick(report: FireReport) {
-        FireReportDialogFragment(report).show(supportFragmentManager, "fireReportDialog")
+        ReportDetailsDialogFragment.newInstance(report)
+            .show(supportFragmentManager, "detailsDialog")
     }
 
     override fun onOtherEmergencyClick(report: OtherEmergency) {
-        OtherEmergencyDialogFragment(report).show(supportFragmentManager, "otherEmergencyDialog")
+        ReportDetailsDialogFragment.newInstance(report)
+            .show(supportFragmentManager, "detailsDialog")
     }
+
 }

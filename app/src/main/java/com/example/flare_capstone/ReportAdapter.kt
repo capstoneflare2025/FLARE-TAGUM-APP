@@ -49,17 +49,17 @@ class ReportAdapter(
 
         when (val item = reports[position]) {
             is FireReport -> {
-                // DATE (use your preferred format; here the stored string)
                 holder.txtDate.text = item.date
 
-                // TYPE -> Always "Fire" (do NOT read any alarm/type field)
-                holder.txtType.text = "Fire"
+                // TYPE → Use actual value from Firebase (e.g., "House on Fire", "Grass/Forest Fire")
+                val type = item.type?.takeIf { it.isNotBlank() } ?: "Fire"
+                holder.txtType.text = type
 
-                // STATUS
                 val status = item.status ?: ""
                 holder.txtStatus.text = status
                 setStatusColor(holder.txtStatus, status)
             }
+
 
             is OtherEmergency -> {
                 // DATE
@@ -81,10 +81,11 @@ class ReportAdapter(
 
     private fun setStatusColor(tv: TextView, statusRaw: String) {
         when (statusRaw.trim().lowercase()) {
-            "Ongoing"   -> tv.setTextColor(Color.parseColor("#E00024")) // red
-            "Completed" -> tv.setTextColor(Color.parseColor("#4CAF50")) // green
-            "Pending"   -> tv.setTextColor(Color.parseColor("#F5F206")) // yellow
-            else        -> tv.setTextColor(Color.parseColor("#2196F3")) // default blue for unknowns
+            "Ongoing" -> tv.setTextColor(Color.parseColor("#E00024")) // red
+            "Completed" -> tv.setTextColor(Color.parseColor("#0D9F00")) // green
+            "Pending" -> tv.setTextColor(Color.BLACK) // normal black
+            else -> tv.setTextColor(Color.BLACK)
         }
     }
+
 }

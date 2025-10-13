@@ -54,6 +54,7 @@
         <activity android:name=".MainActivity"/>
         <activity android:name=".Onboard2Activity"/>
         <activity android:name=".Onboard3Activity"/>
+        <activity android:name=".Onboard4Activity"/>
         <activity
             android:name=".LoginActivity"
             android:exported="true">

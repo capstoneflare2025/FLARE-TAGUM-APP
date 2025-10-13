@@ -25,8 +25,8 @@
         <!-- Back button (same id) -->
         <ImageView
             android:id="@+id/back"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="35dp"
+            android:layout_height="35dp"
             android:src="@drawable/ic_backed"
             android:contentDescription="@string/content_desc_navigate_up"
             android:background="?attr/selectableItemBackgroundBorderless"
@@ -64,7 +64,7 @@
 
         <!-- Card 1: Cuambugan -->
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cuambugan_card"
+            android:id="@+id/tagumCentral"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
@@ -100,7 +100,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Cuambugan Fire Station"
+                        android:text="TAGUM CITY CENTRAL FIRE STATION"
                         android:textStyle="bold"
                         android:textSize="16sp"
                          />
@@ -123,28 +123,56 @@
                         app:tint="?attr/colorOnSurfaceVariant" />
 
                     <TextView
-                        android:id="@+id/cuambugan_contact"
+                        android:id="@+id/globeContact"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0912-345-6789"
+                        android:text="GLOBE - 0926-717-1538"
+                        android:autoLink="phone"
+                        android:linksClickable="true"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <!-- Contact row (keeps your id) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="6dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@drawable/ic_call_24"
+                        android:layout_marginEnd="8dp"
+                        android:contentDescription="@string/content_desc_phone_icon"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                    <TextView
+                        android:id="@+id/smartContact"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SMART - 0964-765-0785"
                         android:autoLink="phone"
                         android:linksClickable="true"
                         android:textSize="15sp" />
                 </LinearLayout>
             </LinearLayout>
+
+
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Card 2: La Filipina -->
+        <!-- Card 1: Cuambugan -->
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/lafilipina_card"
+            android:id="@+id/tagumWest"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="16dp"
             app:cardCornerRadius="20dp"
             app:cardUseCompatPadding="true"
             app:strokeColor="?attr/colorOutline"
             app:strokeWidth="1dp"
-            app:layout_constraintTop_toBottomOf="@id/cuambugan_card"
+            app:layout_constraintTop_toBottomOf="@id/tagumCentral"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
 
@@ -154,6 +182,7 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
+                <!-- Title row -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -171,12 +200,13 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="La Filipina Fire Station"
+                        android:text="TAGUM CITY WEST SUB-STATION"
                         android:textStyle="bold"
                         android:textSize="16sp"
                         />
                 </LinearLayout>
 
+                <!-- Contact row (keeps your id) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -193,87 +223,16 @@
                         app:tint="?attr/colorOnSurfaceVariant" />
 
                     <TextView
-                        android:id="@+id/lafilipina_contact"
+                        android:id="@+id/globeWestContact"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0923-456-7890"
+                        android:text="GLOBE - 0916-461-9521"
                         android:autoLink="phone"
                         android:linksClickable="true"
-                        android:textColor="?attr/colorPrimary"
                         android:textSize="15sp" />
                 </LinearLayout>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Card 3: Mabini -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/mabini_card"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            app:cardCornerRadius="20dp"
-            app:cardUseCompatPadding="true"
-            app:strokeColor="?attr/colorOutline"
-            app:strokeWidth="1dp"
-            app:layout_constraintTop_toBottomOf="@id/lafilipina_card"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/ic_map_pin_24"
-                        android:layout_marginEnd="8dp"
-                        android:contentDescription="@string/content_desc_icon_map_title"
-                        app:tint="?attr/colorError"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Mabini Fire Station"
-                        android:textStyle="bold"
-                        android:textSize="16sp"
-                        />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginTop="6dp">
-
-                    <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:src="@drawable/ic_call_24"
-                        android:layout_marginEnd="8dp"
-                        android:contentDescription="@string/content_desc_phone_icon"
-                        app:tint="?attr/colorOnSurfaceVariant" />
-
-                    <TextView
-                        android:id="@+id/mabini_contact"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="0934-567-8901"
-                        android:autoLink="phone"
-                        android:linksClickable="true"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="15sp" />
-                </LinearLayout>
-            </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
         <!-- Tips -->
@@ -286,9 +245,22 @@
             android:textStyle="bold"
             android:textColor="?attr/colorPrimary"
             android:layout_marginTop="20dp"
-            app:layout_constraintTop_toBottomOf="@id/mabini_card"
+            app:layout_constraintTop_toBottomOf="@id/tagumWest"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
+
+
+        <!-- Divider -->
+        <View
+            android:id="@+id/divider2"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="12dp"
+            android:background="?attr/colorOutline"
+            app:layout_constraintTop_toBottomOf="@id/tips_header"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
 
         <TextView
             android:id="@+id/tips_text"

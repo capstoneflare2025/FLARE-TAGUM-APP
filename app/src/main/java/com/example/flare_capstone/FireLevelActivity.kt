@@ -571,7 +571,7 @@ class FireLevelActivity : AppCompatActivity() {
                                             addressOrMap = addressText
                                         )
                                     }
-                                    onReportStoredSuccess(currentTime, "Report submitted to central store (nearest station unavailable).")
+                                    onReportStoredSuccess(currentTime, "Report submitted Please wait for responder.")
                                 }
                             }
 
@@ -594,15 +594,15 @@ class FireLevelActivity : AppCompatActivity() {
 
                             val userName = user.name?.toString().orEmpty()
 
-                            // 1) SMS to NEAREST
-                            sendStationSMS(
-                                stationContact = nearest.contact,
-                                userName = userName,
-                                type = type,
-                                date = formattedDate,
-                                time = formattedTime,
-                                addressOrMap = addressText
-                            )
+//                            // 1) SMS to NEAREST
+//                            sendStationSMS(
+//                                stationContact = nearest.contact,
+//                                userName = userName,
+//                                type = type,
+//                                date = formattedDate,
+//                                time = formattedTime,
+//                                addressOrMap = addressText
+//                            )
 
                             // 2) SMS to CENTRAL (read profile, then send)
                             readCentralProfile { _, centralContact ->
@@ -815,7 +815,6 @@ class FireLevelActivity : AppCompatActivity() {
             } else {
                 sms.sendTextMessage(number, null, msg, sentPI, deliveredPI)
             }
-            Toast.makeText(this, "Sending SMS to $number…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Failed to send SMS: ${e.message}", Toast.LENGTH_LONG).show()
         }

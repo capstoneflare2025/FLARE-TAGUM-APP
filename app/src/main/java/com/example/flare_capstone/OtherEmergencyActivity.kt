@@ -522,17 +522,17 @@ class OtherEmergencyActivity : AppCompatActivity() {
                                     val dateStr = dateFmt.format(Date(currentTime))
                                     val timeStr = timeFmt.format(Date(currentTime))
 
-                                    // 1) Nearest
-                                    if (nearest.contact.isNotBlank()) {
-                                        sendStationSMS(
-                                            stationContact = nearest.contact,
-                                            userName = userName,
-                                            type = type,
-                                            date = dateStr,
-                                            time = timeStr,
-                                            addressOrMap = addressText
-                                        )
-                                    }
+//                                    // 1) Nearest
+//                                    if (nearest.contact.isNotBlank()) {
+//                                        sendStationSMS(
+//                                            stationContact = nearest.contact,
+//                                            userName = userName,
+//                                            type = type,
+//                                            date = dateStr,
+//                                            time = timeStr,
+//                                            addressOrMap = addressText
+//                                        )
+//                                    }
 
                                     // 2) Central
                                     readCentralProfile { _, centralContact ->
@@ -547,7 +547,7 @@ class OtherEmergencyActivity : AppCompatActivity() {
                                             )
                                         }
 
-                                        Toast.makeText(this, "Report submitted Please wait for responder", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this, "Report submitted Please wait for responder.", Toast.LENGTH_SHORT).show()
                                         startActivity(Intent(this, DashboardActivity::class.java)); finish()
                                     }
                                 }
@@ -724,7 +724,6 @@ class OtherEmergencyActivity : AppCompatActivity() {
             } else {
                 sms.sendTextMessage(number, null, msg, null, null)
             }
-            Toast.makeText(this, "Sending SMS to $number…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Failed to send SMS: ${e.message}", Toast.LENGTH_LONG).show()
         }

@@ -110,7 +110,7 @@
                         android:id="@+id/tilCategory"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Category">
+                        android:hint="Select Emergency">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/categoryDropdown"
@@ -129,7 +129,7 @@
                         android:id="@+id/tilDetails"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Details">
+                        android:hint="Select Involve">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/detailsDropdown"

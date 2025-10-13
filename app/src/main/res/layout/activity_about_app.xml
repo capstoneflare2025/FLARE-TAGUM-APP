@@ -20,8 +20,8 @@
     <!-- Keep your existing back ID -->
     <ImageView
         android:id="@+id/back"
-        android:layout_width="30dp"
-        android:layout_height="30dp"
+        android:layout_width="35dp"
+        android:layout_height="35dp"
         android:src="@drawable/ic_backed"
         android:contentDescription="@string/content_desc_navigate_up"
         android:background="?attr/selectableItemBackgroundBorderless"

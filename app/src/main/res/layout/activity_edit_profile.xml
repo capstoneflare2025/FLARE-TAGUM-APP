@@ -25,8 +25,8 @@
         <!-- Keep your existing 'back' view for code compatibility -->
         <ImageView
             android:id="@+id/back"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="35dp"
+            android:layout_height="35dp"
             android:contentDescription="@string/content_desc_navigate_up"
             android:src="@drawable/ic_backed"
             android:background="?attr/selectableItemBackgroundBorderless"

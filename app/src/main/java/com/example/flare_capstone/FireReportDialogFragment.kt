@@ -61,8 +61,8 @@ class FireReportDialogFragment(private val report: FireReport) : DialogFragment(
         binding.txtStatus.setTextColor(
             when (status.lowercase()) {
                 "Ongoing"   -> Color.parseColor("#E00024") // red
-                "Completed" -> Color.parseColor("#4CAF50") // green
-                else        -> Color.parseColor("#2196F3") // blue default
+                "Completed" -> Color.parseColor("#0D9F00") // green
+                else        -> Color.parseColor("#000000") // blue default
             }
         )
 

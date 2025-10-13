@@ -98,6 +98,11 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     private var iconOther: BitmapDescriptor? = null
     private var iconUser: BitmapDescriptor? = null
 
+    private var canocotanName   = "Canocotan Fire Station"
+    private var laFilipinaName  = "La Filipina Fire Station"
+    private var mabiniName      = "Mabini Fire Station"
+
+
     private var userMarker: Marker? = null
     private val stationMarkers = mutableMapOf<String, Marker>() // key: station title
     private var cameraFittedOnce = false
@@ -437,11 +442,12 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun getStationLatLngByTitle(title: String): LatLng? = when (title) {
-        "Canocotan Fire Station"   -> LatLng(canocotanLat, canocotanLng)
-        "La Filipina Fire Station" -> LatLng(laFilipinaLat, laFilipinaLng)
-        "Mabini Fire Station"      -> LatLng(mabiniLat, mabiniLng)
+        canocotanName   -> LatLng(canocotanLat, canocotanLng)
+        laFilipinaName  -> LatLng(laFilipinaLat, laFilipinaLng)
+        mabiniName      -> LatLng(mabiniLat, mabiniLng)
         else -> null
     }
+
 
     private fun hasLocationPermission(): Boolean {
         val ctx = context ?: return false
@@ -520,16 +526,17 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun fetchFireStationLocations() {
-        fetchFireStationLatLng("CapstoneFlare/CanocotanFireStation") { lat, lng ->
-            canocotanLat = lat; canocotanLng = lng; canocotanFetched = true; updateMapIfReady()
+        fetchFireStationLatLngAndName("CapstoneFlare/CanocotanFireStation") { name, lat, lng ->
+            canocotanName = name; canocotanLat = lat; canocotanLng = lng; canocotanFetched = true; updateMapIfReady()
         }
-        fetchFireStationLatLng("CapstoneFlare/LaFilipinaFireStation") { lat, lng ->
-            laFilipinaLat = lat; laFilipinaLng = lng; laFilipinaFetched = true; updateMapIfReady()
+        fetchFireStationLatLngAndName("CapstoneFlare/LaFilipinaFireStation") { name, lat, lng ->
+            laFilipinaName = name; laFilipinaLat = lat; laFilipinaLng = lng; laFilipinaFetched = true; updateMapIfReady()
         }
-        fetchFireStationLatLng("CapstoneFlare/MabiniFireStation") { lat, lng ->
-            mabiniLat = lat; mabiniLng = lng; mabiniFetched = true; updateMapIfReady()
+        fetchFireStationLatLngAndName("CapstoneFlare/MabiniFireStation") { name, lat, lng ->
+            mabiniName = name; mabiniLat = lat; mabiniLng = lng; mabiniFetched = true; updateMapIfReady()
         }
     }
+
 
     /* =========================================================
      * Drawer header (User profile)
@@ -662,10 +669,11 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
 
         val user = LatLng(userLatitude, userLongitude)
         val stations = listOf(
-            Triple("Canocotan Fire Station", canocotanLat, canocotanLng),
-            Triple("La Filipina Fire Station", laFilipinaLat, laFilipinaLng),
-            Triple("Mabini Fire Station", mabiniLat, mabiniLng)
+            Triple(canocotanName,  canocotanLat,  canocotanLng),
+            Triple(laFilipinaName, laFilipinaLat, laFilipinaLng),
+            Triple(mabiniName,     mabiniLat,     mabiniLng)
         )
+
 
         if (userMarker == null) {
             userMarker = map.addMarker(
@@ -1099,6 +1107,29 @@ class HomeFragment : Fragment(), OnMapReadyCallback {
             postToast(stationGateMessage()); return false
         }
         return true
+    }
+
+
+    private fun fetchFireStationLatLngAndName(path: String, onDone: (String, Double, Double) -> Unit) {
+        val profileKey = stationProfileKey[path] ?: "Profile"
+        database.child(path).child(profileKey).get().addOnSuccessListener { snap ->
+            val lat = snap.getDouble("latitude")
+            val lng = snap.getDouble("longitude")
+            val name = snap.child("name").getValue(String::class.java)
+                ?: path.substringAfterLast('/') // fallback to last path segment
+            onDone(name, lat, lng)
+        }.addOnFailureListener {
+            // Fallback to legacy non-Profile shape
+            database.child(path).get().addOnSuccessListener { old ->
+                val lat = old.getDouble("latitude")
+                val lng = old.getDouble("longitude")
+                val name = old.child("name").getValue(String::class.java)
+                    ?: path.substringAfterLast('/')
+                onDone(name, lat, lng)
+            }.addOnFailureListener {
+                onDone(path.substringAfterLast('/'), 0.0, 0.0)
+            }
+        }
     }
 
 

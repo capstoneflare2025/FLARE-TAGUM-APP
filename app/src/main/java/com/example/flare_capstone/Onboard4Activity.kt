@@ -3,22 +3,20 @@ package com.example.flare_capstone
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import com.example.flare_capstone.databinding.ActivityOnboard2Binding
+import com.example.flare_capstone.databinding.ActivityOnboading4Binding
 
-class Onboard2Activity: AppCompatActivity() {
+class Onboard4Activity: AppCompatActivity() {
 
-    private lateinit var binding: ActivityOnboard2Binding
+    private lateinit var binding: ActivityOnboading4Binding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        binding = ActivityOnboard2Binding.inflate(layoutInflater)
+        binding = ActivityOnboading4Binding.inflate(layoutInflater)
         setContentView(binding.root)
 
         binding.nextButton.setOnClickListener{
-            startActivity(Intent(this, Onboard4Activity::class.java))
+            startActivity(Intent(this, Onboard3Activity::class.java))
             finish()
         }
-
     }
 }

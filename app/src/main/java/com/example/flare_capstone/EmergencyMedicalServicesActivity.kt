@@ -523,12 +523,12 @@ class EmergencyMedicalServicesActivity : AppCompatActivity() {
                                                 addressOrMap = addrText
                                             )
                                         }
-                                        Toast.makeText(this, "Submitted to central and nearest: ${nearest.name}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this, "Report submitted Please wait for responder.", Toast.LENGTH_SHORT).show()
                                         startActivity(Intent(this, DashboardActivity::class.java)); finish()
                                     }
                                 }
                                 .addOnFailureListener { e ->
-                                    Toast.makeText(this, "Central saved. Nearest failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this, "Central saved. ${e.message}", Toast.LENGTH_LONG).show()
                                     startActivity(Intent(this, DashboardActivity::class.java)); finish()
                                 }
                         }
@@ -698,7 +698,6 @@ class EmergencyMedicalServicesActivity : AppCompatActivity() {
             } else {
                 sms.sendTextMessage(number, null, msg, null, null)
             }
-            Toast.makeText(this, "Sending SMS to $number…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Failed to send SMS: ${e.message}", Toast.LENGTH_LONG).show()
         }
