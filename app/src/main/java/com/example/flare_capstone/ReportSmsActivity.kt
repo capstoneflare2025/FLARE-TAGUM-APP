@@ -45,7 +45,7 @@ class ReportSmsActivity : AppCompatActivity() {
     // Default destination: CENTRAL
     private val station = FireStation(
         name = "Tagum City Central Fire Station",
-        contact = "09122469212",
+        contact = "09267171538",
         latitude = 7.4217617292640785,
         longitude = 125.79018416901866
     )
