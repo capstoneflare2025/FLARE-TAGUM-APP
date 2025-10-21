@@ -20,6 +20,8 @@ class VerifyEmailActivity : AppCompatActivity() {
     private var name: String = ""
     private var email: String = ""
     private var contact: String = ""
+    private var date: String = ""
+    private var time: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,6 +33,8 @@ class VerifyEmailActivity : AppCompatActivity() {
         name    = intent.getStringExtra("name") ?: ""
         email   = intent.getStringExtra("email") ?: ""
         contact = intent.getStringExtra("contact") ?: ""
+        date    = intent.getStringExtra("date") ?: ""
+        time   = intent.getStringExtra("time") ?: ""
 
         binding.emailTv.text = email
 
@@ -54,7 +58,7 @@ class VerifyEmailActivity : AppCompatActivity() {
             }
             if (user.isEmailVerified) {
                 val uid = user.uid
-                val obj = mapOf("name" to name, "email" to email, "contact" to contact)
+                val obj = mapOf("name" to name, "email" to email, "contact" to contact, "date" to date, "time" to time)
                 database.child(uid).setValue(obj).addOnCompleteListener { dbTask ->
                     if (dbTask.isSuccessful) {
                         toast("Email verified! You can now log in.")

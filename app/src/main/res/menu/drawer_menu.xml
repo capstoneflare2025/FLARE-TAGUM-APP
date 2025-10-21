@@ -13,13 +13,13 @@
         <item
             android:id="@+id/nav_report_other"
             android:title="Report Other Emerency"
-            android:icon="@drawable/ic_fire_24"
+            android:icon="@drawable/ic_warning_24"
             app:showAsAction="never"/>
 
         <item
             android:id="@+id/nav_report_ems"
             android:title="Report Emergency Medical"
-            android:icon="@drawable/ic_fire_24"
+            android:icon="@drawable/ic_car_crash_24"
             app:showAsAction="never"/>
 
         <item

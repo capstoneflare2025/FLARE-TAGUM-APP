@@ -78,6 +78,8 @@ class EditProfileActivity : AppCompatActivity() {
         binding.profileIcon.isClickable = true
         binding.profileIcon.setOnClickListener { showImageSourceSheet() }
 
+        binding.changePhotoIcon.setOnClickListener { showImageSourceSheet() }
+
         // Email is readonly
         binding.email.isFocusable = false
         binding.email.isFocusableInTouchMode = false
@@ -295,7 +297,7 @@ class EditProfileActivity : AppCompatActivity() {
                     "Take photo" -> ensureCameraAndOpen()
                     "Choose from gallery" -> ensureGalleryAndOpen()
                     "Remove photo" -> {
-                        binding.profileIcon.setImageResource(R.drawable.ic_camera_profile)
+                        binding.profileIcon.setImageResource(R.drawable.ic_profile)
                         base64ProfileImage = null
                         hasProfileImage = false
                         removeProfileImageRequested = true

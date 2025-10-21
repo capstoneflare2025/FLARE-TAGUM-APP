@@ -138,11 +138,11 @@ class ProfileFireFighterFragment : Fragment() {
         return when (e) {
             // Mabini
 
-            "mabiniff01@gmail.com" -> "MabiniFireFighterAccount"
+            "tcwestfiresubstation.com" -> "MabiniFireFighterAccount"
 
-            "lafilipinaff01@gmail.com" -> "LaFilipinaFireFighterAccount"
+            "lafilipinafire@gmail.com" -> "LaFilipinaFireFighterAccount"
 
-            "canocotanff01@gmail.com" -> "CanocotanFireFighterAccount"
+            "bfp_tagumcity@yahoo.com" -> "CanocotanFireFighterAccount"
 
             else -> null
         }

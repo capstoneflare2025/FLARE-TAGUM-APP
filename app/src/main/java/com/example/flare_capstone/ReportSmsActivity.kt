@@ -45,7 +45,7 @@ class ReportSmsActivity : AppCompatActivity() {
     // Default destination: CENTRAL
     private val station = FireStation(
         name = "Tagum City Central Fire Station",
-        contact = "09635741233",
+        contact = "09122469212",
         latitude = 7.4217617292640785,
         longitude = 125.79018416901866
     )
@@ -137,7 +137,15 @@ class ReportSmsActivity : AppCompatActivity() {
         }
         // ------------------------------------------------
 
+        val systemActive = false // flip to true when deployed
+
         binding.sendReport.setOnClickListener {
+
+//            if (!systemActive) {
+//                Toast.makeText(this, "SMS not available. System not yet active.", Toast.LENGTH_LONG).show()
+//                return@setOnClickListener
+//            }
+
             val name = binding.name.text.toString().trim()
             val location = binding.location.text.toString().trim()
             val category = selectedCategory

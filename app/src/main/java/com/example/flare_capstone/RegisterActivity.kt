@@ -18,12 +18,23 @@ import com.example.flare_capstone.databinding.ActivityRegisterBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import android.app.Dialog
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+
 
 class RegisterActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRegisterBinding
     private lateinit var auth: FirebaseAuth
     private lateinit var database: DatabaseReference
+
+    private var guardDialog: Dialog? = null
 
     private val CONTACT_REGEX = Regex("^09\\d{9}$")
     private val PASSWORD_REGEX =
@@ -107,6 +118,17 @@ class RegisterActivity : AppCompatActivity() {
             } else binding.confirmPassword.error = null
             // ---- end validations ----
 
+
+            // ↓↓↓ INSERT THIS BLOCK ↓↓↓
+            binding.register.isEnabled = false
+            guardDialog = showRegisterGuardDialog()
+            binding.register.postDelayed({
+                if (!isFinishing) {
+                    dismissRegisterGuardDialog()
+                    binding.register.isEnabled = true
+                }
+            }, 5000L)
+
             // UX pre-check: ensure contact is not already claimed (non-authoritative)
             ensureContactFree(contact) {
                 // 1) Check if email already has an Auth account
@@ -183,6 +205,12 @@ class RegisterActivity : AppCompatActivity() {
                 }
                 val user = auth.currentUser ?: return@addOnCompleteListener toast("Registration failed: no user")
 
+                // Generate current date and time separately (24-hour format)
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                val currentDate = dateFormat.format(Date())
+                val currentTime = timeFormat.format(Date())
+
                 // Do NOT write to /Users yet. Only after verified (in VerifyEmailActivity).
                 user.sendEmailVerification()
                     .addOnSuccessListener {
@@ -191,6 +219,8 @@ class RegisterActivity : AppCompatActivity() {
                             putExtra("name", name)
                             putExtra("email", email)
                             putExtra("contact", contact) // normalized
+                            putExtra("date", currentDate)
+                            putExtra("time", currentTime)
                         }
                         startActivity(i)
                         finish()
@@ -351,6 +381,33 @@ class RegisterActivity : AppCompatActivity() {
     private fun toast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
+
+    private fun showRegisterGuardDialog(): Dialog {
+        val v = layoutInflater.inflate(R.layout.custom_loading_dialog, null)
+        v.findViewById<TextView>(R.id.loading_message).text = "Please wait…"
+        v.findViewById<TextView>(R.id.closeButton).visibility = View.GONE // hide it
+
+        return Dialog(this).apply {
+            setContentView(v)
+            setCancelable(false)
+            window?.setLayout(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            show()
+        }
+    }
+
+    private fun dismissRegisterGuardDialog() {
+        guardDialog?.let { if (it.isShowing) it.dismiss() }
+        guardDialog = null
+    }
+
+    override fun onDestroy() {
+        dismissRegisterGuardDialog() // avoid window leak
+        super.onDestroy()
+    }
+
 
     data class User(val name: String, val email: String, val contact: String)
 }

@@ -26,6 +26,8 @@ import com.example.flare_capstone.databinding.ActivityLoginBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.firebase.auth.FirebaseAuth
+// at top of LoginActivity
+import com.google.firebase.database.*
 
 class LoginActivity : AppCompatActivity() {
 
@@ -36,6 +38,9 @@ class LoginActivity : AppCompatActivity() {
     private var verifyDialog: androidx.appcompat.app.AlertDialog? = null
     private val verifyHandler = Handler(Looper.getMainLooper())
     private var verifyPoll: Runnable? = null
+
+    // Cache (null = not loaded yet)
+    private var firefighterEmailsCache: Set<String>? = null
 
     /* ---------------- Rules ---------------- */
     // Strong password: 8+ chars, upper, lower, digit, special, no spaces
@@ -100,9 +105,9 @@ class LoginActivity : AppCompatActivity() {
      * Helpers
      * ========================================================= */
     private fun isFirefighter(emailLc: String): Boolean {
-        return emailLc == "mabiniff01@gmail.com" ||
-                emailLc == "lafilipinaff01@gmail.com" ||
-                emailLc == "canocotanff01@gmail.com"
+        return emailLc == "bfp_tagumcity@yahoo.com" ||
+                emailLc == "tcwestfiresubstation@gmail.com" ||
+                emailLc == "lafilipinafire@gmail.com"
     }
 
     /* =========================================================

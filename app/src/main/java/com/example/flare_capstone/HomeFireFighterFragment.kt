@@ -180,16 +180,9 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private fun stationAccountForEmail(email: String?): String? {
         val e = email ?: return null
         return when (e) {
-            // Mabini
-            "mabini01@gmail.com",
-            "mabiniff01@gmail.com",
-            "mabiniff001@gmail.com" -> "MabiniFireFighterAccount"
-            // La Filipina
-            "lafilipinaff01@gmail.com",
-            "lafilipinaff001@gmail.com" -> "LaFilipinaFireFighterAccount"
-            // Canocotan (kept for completeness)
-            "canocotanff01@gmail.com",
-            "canocotanff001@gmail.com" -> "CanocotanFireFighterAccount"
+            "tcwestfiresubstation@gmail.com" -> "MabiniFireFighterAccount"
+            "lafilipinafire@gmail@gmail.com" -> "LaFilipinaFireFighterAccount"
+            "bfp_tagumcity@yahoo.com" -> "CanocotanFireFighterAccount"
             else -> null
         }
     }
