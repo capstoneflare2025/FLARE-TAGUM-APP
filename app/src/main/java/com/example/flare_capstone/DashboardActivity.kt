@@ -7,9 +7,11 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -54,6 +56,11 @@ class DashboardActivity : AppCompatActivity() {
     private var isNetworkValidated = false
     private var isNetworkSlow = true
     private var isInitialFirebaseReady = false
+
+    private companion object {
+        private const val CH_GENERAL = "default_channel_v2" // NEW ID
+    }
+
 
     /* ---------------- Network Callback ---------------- */
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -221,16 +228,35 @@ class DashboardActivity : AppCompatActivity() {
      * Notifications
      * ========================================================= */
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "default_channel",
-                "General Notifications",
-                NotificationManager.IMPORTANCE_HIGH
-            )
-            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java)
+
+        // Clean up the truly old one once (harmless if missing)
+        runCatching { nm.deleteNotificationChannel("default_channel") }
+        // Ensure fresh channel with correct sound
+        runCatching { nm.deleteNotificationChannel(CH_GENERAL) }
+
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
+        val soundUri = Uri.parse("android.resource://$packageName/${R.raw.message_notif}")
+
+        val ch = NotificationChannel(
+            CH_GENERAL,
+            "General Notifications",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            setSound(soundUri, attrs)
+            enableVibration(true)
+            description = "General alerts with custom sound"
         }
+
+        nm.createNotificationChannel(ch)
+        Log.d("Notif", "Dashboard channel sound=${nm.getNotificationChannel(CH_GENERAL)?.sound}")
     }
+
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun triggerNotification(
@@ -260,7 +286,7 @@ class DashboardActivity : AppCompatActivity() {
             getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
 
-        val notification = NotificationCompat.Builder(this, "default_channel")
+        val notification = NotificationCompat.Builder(this, CH_GENERAL)
             .setSmallIcon(R.drawable.ic_logo)
             .setContentTitle(title)
             .setContentText(message)
@@ -295,7 +321,7 @@ class DashboardActivity : AppCompatActivity() {
             getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
 
-        val notification = NotificationCompat.Builder(this, "default_channel")
+        val notification = NotificationCompat.Builder(this, CH_GENERAL)
             .setSmallIcon(R.drawable.ic_logo)
             .setContentTitle("Status Update: $status")
             .setContentText("The status of your report has changed to $status.")

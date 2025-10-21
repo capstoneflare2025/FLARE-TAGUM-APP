@@ -60,6 +60,7 @@ class FireFighterResponseActivity : AppCompatActivity() {
     private val ACCOUNTS = "FireFighter/AllFireFighterAccount"
     private val ADMIN_MESSAGES = "AdminMessages"
 
+
     // ----- View / Firebase -----
     private lateinit var binding: ActivityFireFighterResponseBinding
     private lateinit var db: DatabaseReference
@@ -400,7 +401,7 @@ class FireFighterResponseActivity : AppCompatActivity() {
                 val first = snapshot.children.first()
                 accountKey = first.key
                 accountName = first.child("name").getValue(String::class.java) ?: (first.key ?: "You")
-                binding.fireStationName.text = accountName
+                binding.fireStationName.text = "Tagum City Central Fire Station"
                 attachMessages()
             }
             override fun onCancelled(error: DatabaseError) {

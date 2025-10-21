@@ -19,6 +19,8 @@ class InboxFireFighterFragment : Fragment() {
     private var emptyText: TextView? = null
     private var searchInput: EditText? = null
 
+
+
     // DB
     private var accountsRef: Query? = null
     private var accountsListener: ValueEventListener? = null

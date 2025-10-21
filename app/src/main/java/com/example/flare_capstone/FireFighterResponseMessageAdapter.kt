@@ -38,7 +38,8 @@ class FireFighterResponseMessageAdapter(
         val station = stationList[position]
 
         // Name
-        holder.fireStationName.text = station.name
+        holder.fireStationName.text = "Tagum City Central Fire Station"
+
 
         // Build a summary using mutually-exclusive fields from the latest message
         // Assumes your FireFighterStation has fields:
@@ -91,7 +92,8 @@ class FireFighterResponseMessageAdapter(
 
             // Launch chat
             val intent = Intent(ctx, FireFighterResponseActivity::class.java).apply {
-                putExtra("STATION_NAME", station.name)
+                val stationName = "Tagum City Central Fire Station"
+                putExtra("STATION_NAME", stationName)
                 putExtra("STATION_ID", station.id) // id == AllFireFighterAccount key
             }
             ctx.startActivity(intent)

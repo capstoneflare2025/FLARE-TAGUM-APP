@@ -181,7 +181,7 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
         val e = email ?: return null
         return when (e) {
             "tcwestfiresubstation@gmail.com" -> "MabiniFireFighterAccount"
-            "lafilipinafire@gmail@gmail.com" -> "LaFilipinaFireFighterAccount"
+            "lafilipinafire@gmail.com" -> "LaFilipinaFireFighterAccount"
             "bfp_tagumcity@yahoo.com" -> "CanocotanFireFighterAccount"
             else -> null
         }
@@ -352,18 +352,25 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     }
 
 
-
     private fun startLocationUpdates() {
         if (!hasLocationPermission()) return
-        val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000L)
-            .setMinUpdateIntervalMillis(5_000L)
+
+        val req = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            1_000L                 // desired interval ~1s
+        )
+            .setMinUpdateIntervalMillis(1_000L) // don't go slower than 1s
+            .setMaxUpdateDelayMillis(0L)        // deliver ASAP, no batching
+            .setMinUpdateDistanceMeters(1f)     // optional: only if moved ≥1 m
             .build()
+
         try {
             fusedLocation.requestLocationUpdates(req, locCallback, requireActivity().mainLooper)
         } catch (_: SecurityException) {
             Log.w(TAG, "requestLocationUpdates SecurityException")
         }
     }
+
 
     private fun stopLocationUpdates() {
         try { fusedLocation.removeLocationUpdates(locCallback) } catch (_: Exception) {}
@@ -557,7 +564,8 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
     private fun markCompleted() {
         val key = selectedIncidentKey ?: return
         val inc = incidents[key] ?: return
-        val baseFF = reportsBase ?: return  // station-scoped base
+
+        val db = FirebaseDatabase.getInstance().reference
 
         val typeNode = when (inc.source) {
             Source.FIRE  -> "FireReport"
@@ -566,30 +574,67 @@ class HomeFireFighterFragment : Fragment(), OnMapReadyCallback {
             Source.SMS   -> "SmsReport"
         }
 
-        // Central AllReport base
+        // central & current station bases
         val baseCentral = "TagumCityCentralFireStation/AllReport"
+        val myBaseFF = reportsBase ?: return // e.g. .../AllFireFighterAccount/<thisStation>/AllReport
 
-        // Fan-out: update both the station-scoped and central paths together
-        val updates = hashMapOf<String, Any>(
-            "$baseFF/$typeNode/${inc.id}/status" to "Completed",
-            "$baseCentral/$typeNode/${inc.id}/status" to "Completed"
-            // Optional: record a completion timestamp too
-            // "$baseFF/$typeNode/${inc.id}/completedAt" to ServerValue.TIMESTAMP,
-            // "$baseCentral/$typeNode/${inc.id}/completedAt" to ServerValue.TIMESTAMP
+        // all known station account keys (use your real list)
+        val allStations = listOf(
+            "CanocotanFireFighterAccount",
+            "LaFilipinaFireFighterAccount",
+            "MabiniFireFighterAccount"
         )
 
-        FirebaseDatabase.getInstance().reference
-            .updateChildren(updates)
-            .addOnSuccessListener {
-                Toast.makeText(requireContext(), "Marked as Completed", Toast.LENGTH_SHORT).show()
-                Log.d(TAG, "Completed id=${inc.id} src=${inc.source} (both station + central)")
-                // Removal from the map will follow from ChildChanged/Removed listeners
+        // firefighter-accounts root
+        val ffRoot = "TagumCityCentralFireStation/FireFighter/AllFireFighterAccount"
+
+        // First read the AllFireFighterAccount tree once so we only update nodes that exist
+        db.child(ffRoot).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snap: DataSnapshot) {
+                val updates = hashMapOf<String, Any>()
+
+                // 1) Central canonical record
+                updates["$baseCentral/$typeNode/${inc.id}/status"] = "Completed"
+                // Optional timestamps:
+                // updates["$baseCentral/$typeNode/${inc.id}/completedAt"] = ServerValue.TIMESTAMP
+
+                // 2) Current station copy (safe even if also covered below)
+                updates["$myBaseFF/$typeNode/${inc.id}/status"] = "Completed"
+                // updates["$myBaseFF/$typeNode/${inc.id}/completedAt"] = ServerValue.TIMESTAMP
+
+                // 3) Every *other* station that has this incident → flip to Completed too
+                for (station in allStations) {
+                    val path = "$station/AllReport/$typeNode/${inc.id}"
+                    if (snap.child(path).exists()) {
+                        updates["$ffRoot/$path/status"] = "Completed"
+                        // updates["$ffRoot/$path/completedAt"] = ServerValue.TIMESTAMP
+                    }
+                }
+
+                if (updates.isEmpty()) {
+                    Toast.makeText(requireContext(), "Nothing to update", Toast.LENGTH_SHORT).show()
+                    return
+                }
+
+                db.updateChildren(updates)
+                    .addOnSuccessListener {
+                        Toast.makeText(requireContext(), "Marked as Completed (all copies)", Toast.LENGTH_SHORT).show()
+                        Log.d(TAG, "Completed id=${inc.id} src=${inc.source} (central + all stations)")
+                        // Your child listeners will prune the marker if the item disappears or status filters change
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(requireContext(), "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        Log.w(TAG, "Complete failed: ${e.message}")
+                    }
             }
-            .addOnFailureListener { e ->
-                Toast.makeText(requireContext(), "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                Log.w(TAG, "Complete failed: ${e.message}")
+
+            override fun onCancelled(error: DatabaseError) {
+                Toast.makeText(requireContext(), "Read failed: ${error.message}", Toast.LENGTH_SHORT).show()
+                Log.w(TAG, "Snapshot read failed: ${error.message}")
             }
+        })
     }
+
 
 
     // ---------- OSRM routing ----------

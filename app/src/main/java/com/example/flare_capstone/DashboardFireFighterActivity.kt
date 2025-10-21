@@ -289,18 +289,12 @@ class DashboardFireFighterActivity : AppCompatActivity() {
     private fun stationAccountForEmail(email: String?): String? {
         val e = email ?: return null
         return when (e) {
-            // Mabini
-            "mabini01@gmail.com",
-            "mabiniff01@gmail.com",
-            "mabiniff001@gmail.com" -> "MabiniFireFighterAccount"
 
-            // La Filipina
-            "lafilipinaff01@gmail.com",
-            "lafilipinaff001@gmail.com" -> "LaFilipinaFireFighterAccount"
+            "tcwestfiresubstation@gmail.com" -> "MabiniFireFighterAccount"
 
-            // Canocotan (kept for completeness)
-            "canocotanff01@gmail.com",
-            "canocotanff001@gmail.com" -> "CanocotanFireFighterAccount"
+            "lafilipinafire@gmail.com" -> "LaFilipinaFireFighterAccount"
+
+            "bfp_tagumcity@yahoo.com" -> "CanocotanFireFighterAccount"
 
             else -> null
         }
@@ -450,10 +444,10 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         // Pre-O fallback for sounds:
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             when (channelId) {
-                CH_FIRE  -> { builder.setSound(rawSoundUri(R.raw.fire_alert));  builder.setVibrate(longArrayOf(0, 600, 200, 600, 200, 600)) }
-                CH_OTHER -> { builder.setSound(rawSoundUri(R.raw.other_alert)); builder.setVibrate(longArrayOf(0, 400, 150, 400)) }
-                CH_EMS   -> { builder.setSound(rawSoundUri(R.raw.other_alert)); builder.setVibrate(longArrayOf(0, 400, 150, 400)) }
-                CH_SMS   -> { builder.setDefaults(NotificationCompat.DEFAULT_SOUND); builder.setVibrate(longArrayOf(0, 250, 120, 250, 120, 250)) }
+                CH_FIRE  -> { builder.setSound(rawSoundUri(R.raw.fire_report));  builder.setVibrate(longArrayOf(0, 600, 200, 600, 200, 600)) }
+                CH_OTHER -> { builder.setSound(rawSoundUri(R.raw.other_emergency_report)); builder.setVibrate(longArrayOf(0, 400, 150, 400)) }
+                CH_EMS   -> { builder.setSound(rawSoundUri(R.raw.emergecy_medical_services_report)); builder.setVibrate(longArrayOf(0, 400, 150, 400)) }
+                CH_SMS   -> { builder.setSound(rawSoundUri(R.raw.sms_report)); builder.setVibrate(longArrayOf(0, 400, 150, 400)) }
             }
         }
 
@@ -479,32 +473,32 @@ class DashboardFireFighterActivity : AppCompatActivity() {
         recreateChannel(
             id = CH_FIRE,
             name = "Firefighter • FIRE",
-            soundUri = rawSoundUri(R.raw.fire_alert),     // custom
+            soundUri = rawSoundUri(R.raw.fire_report),     // custom
             useDefault = false
         )
         recreateChannel(
             id = CH_OTHER,
             name = "Firefighter • OTHER",
-            soundUri = rawSoundUri(R.raw.other_alert),    // custom
+            soundUri = rawSoundUri(R.raw.other_emergency_report),    // custom
             useDefault = false
         )
         recreateChannel(
             id = CH_EMS,
             name = "Firefighter • EMS",
-            soundUri = rawSoundUri(R.raw.other_alert),    // reuse OTHER unless you add ems_alert
+            soundUri = rawSoundUri(R.raw.emergecy_medical_services_report),    // reuse OTHER unless you add ems_alert
             useDefault = false
         )
         recreateChannel(
             id = CH_SMS,
             name = "Firefighter • SMS",
-            soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), // system default
+            soundUri = rawSoundUri(R.raw.sms_report),    // reuse OTHER unless you add ems_alert
             useDefault = true
         )
 
         recreateChannel(
             id = CH_MSG,
             name = "Firefighter • Admin Messages",
-            soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), // or a custom raw if you want
+            soundUri = rawSoundUri(R.raw.message_notif),
             useDefault = true
         )
 
